@@ -236,6 +236,85 @@ def test_removeFromLists(testOutputPath):
     assert pwobj.Integer(3) in iList3
 
 
+def test_SqliteMapper_deleteAndExists(testOutputPath):
+    fn = os.path.join(testOutputPath, "delete.sqlite")
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+
+    i1 = pwobj.Integer(1)
+    i2 = pwobj.Integer(2)
+    mapper.insert(i1)
+    mapper.insert(i2)
+    mapper.commit()
+
+    assert mapper.exists(i1.getObjId())
+    assert mapper.exists(i2.getObjId())
+
+    mapper.delete(i1)
+    mapper.commit()
+
+    assert not mapper.exists(i1.getObjId())
+    assert mapper.exists(i2.getObjId())
+    remainingIds = [o.getObjId() for o in mapper.selectAll()]
+    assert i1.getObjId() not in remainingIds
+    assert i2.getObjId() in remainingIds
+
+
+def test_SqliteMapper_deleteAll(testOutputPath):
+    fn = os.path.join(testOutputPath, "deleteall.sqlite")
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+
+    mapper.insert(pwobj.Integer(1))
+    mapper.insert(pwobj.Integer(2))
+    mapper.commit()
+    assert len(mapper.selectAll()) == 2
+
+    mapper.deleteAll()
+    mapper.commit()
+    assert len(mapper.selectAll()) == 0
+
+
+def test_SqliteMapper_getParentAndFullName(testOutputPath):
+    fn = os.path.join(testOutputPath, "parent.sqlite")
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+
+    c = Complex.createComplex()
+    c.setName('myComplex')
+    mapper.insert(c)  # cascades to insert c.real / c.imag children
+    mapper.commit()
+
+    assert mapper.getParent(c) is None
+
+    real = mapper.selectById(c.real.getObjId())
+    parent = mapper.getParent(real)
+    assert parent.getObjId() == c.getObjId()
+
+    assert mapper.getFullName(c.real) == 'myComplex.real'
+
+
+def test_SqliteFlatMapper_deleteAndClear(testOutputPath):
+    _setMockDomain()
+    dbName = os.path.join(testOutputPath, 'flat_delete.sqlite')
+    mapper = pwmapper.SqliteFlatMapper(dbName, pw.Config.getDomain().getMapperDict())
+
+    images = []
+    for i in range(1, 4):
+        img = MockImage()
+        img.setLocation(i, IMAGES_STK)
+        img.setObjId(i)  # SqliteFlatMapper.insert does not report the assigned id back
+        mapper.insert(img)
+        images.append(img)
+    mapper.commit()
+    assert mapper.count() == 3
+
+    mapper.delete(images[0])
+    mapper.commit()
+    assert mapper.count() == 2
+
+    mapper.clear()
+    mapper.commit()
+    assert mapper.count() == 0
+
+
 def _setMockDomain():
     # Some SqliteFlatMapper tests rely on the mock domain's mapper dict
     # being explicitly (re)set - preserved from the original setUpClass.
