@@ -22,8 +22,8 @@ jobs:
       matrix:
         python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -36,7 +36,7 @@ jobs:
           pip install -r requirements-dev.txt
       - run: pip check
       - run: pytest -m "not gui" --junitxml=pytest-report.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pytest-report-${{ matrix.python-version }}
@@ -50,8 +50,8 @@ jobs:
       matrix:
         python-version: ['3.8', '3.9', '3.10', '3.11', '3.12']
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -64,7 +64,7 @@ jobs:
           pip install -r requirements-dev.txt
       - run: sudo apt-get update && sudo apt-get install -y python3-tk xvfb
       - run: xvfb-run -a pytest -m gui --junitxml=pytest-report-gui.xml
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: always()
         with:
           name: pytest-report-gui-${{ matrix.python-version }}
