@@ -830,10 +830,7 @@ def weakImport(package, msg=None):
             raise e
         elif msg is not None:
             logger.warning(msg)
-# To be removed once developers have installed distro. 20-Nov-2023.
-with weakImport("distro", msg='You are missing distro package. '
-            'Did you "git pulled"?. Please run "scipion3 pip install distro==1.8".'):
-    import distro
+import distro
 
 class OS:
     @staticmethod

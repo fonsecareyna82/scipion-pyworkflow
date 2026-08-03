@@ -158,7 +158,7 @@ class Config:
         if caster:
             try:
                 value = caster(value)
-            except:
+            except Exception:
                 logger.warning("Variable %s has this value %s that can't be casted to the right type (%s). Using %s (default value)" %
                                (key, value, caster, default))
                 value = default
