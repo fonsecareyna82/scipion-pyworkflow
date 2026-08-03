@@ -22,125 +22,102 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 import threading
 
-import pyworkflow.tests as pwtests
 import pyworkflow.mapper as pwmapper
 import pyworkflow.protocol as pwprot
 from pyworkflow.project import Project
 from pyworkflow.protocol.constants import VOID_GPU
-
+from pyworkflowtests import Domain
 
 # TODO: this test seems not to be finished.
 from pyworkflowtests.protocols import SleepingProtocol
-from pyworkflowtests import Domain
 
 
-class TestProtocolExecution(pwtests.BaseTest):
-    
-    @classmethod
-    def setUpClass(cls):
-        pwtests.setupTestOutput(cls)
-    
-    def test_StepExecutor(self):
-        """Test the list with several Complex"""
-        fn = self.getOutputPath("protocol.sqlite")
-        print("Writing to db: %s" % fn)
+def test_StepExecutor(testOutputPath):
+    """Test the list with several Complex"""
+    fn = os.path.join(testOutputPath, "protocol.sqlite")
+    print("Writing to db: %s" % fn)
 
-        # Discover objects and protocols
-        mapperDict = Domain.getMapperDict()
+    # Discover objects and protocols
+    mapperDict = Domain.getMapperDict()
 
-        # Associate the project
-        proj = Project(Domain, path=self.getOutputPath(''))
+    # Associate the project
+    proj = Project(Domain, path=testOutputPath)
 
-        # Check that the protocol has associated package
-        mapper = pwmapper.SqliteMapper(fn, mapperDict)
-        prot = SleepingProtocol(mapper=mapper, n=2, project= proj,
-                                workingDir=self.getOutputPath(''))
-        domain = prot.getClassDomain()
-        domain.printInfo()
+    # Check that the protocol has associated package
+    mapper = pwmapper.SqliteMapper(fn, mapperDict)
+    prot = SleepingProtocol(mapper=mapper, n=2, project=proj, workingDir=testOutputPath)
+    domain = prot.getClassDomain()
+    domain.printInfo()
 
-        prot.setStepsExecutor(pwprot.StepExecutor(hostConfig=None))
-        prot.makeWorkingDir()
-        prot.run()
-        mapper.commit()
-        mapper.close()
+    prot.setStepsExecutor(pwprot.StepExecutor(hostConfig=None))
+    prot.makeWorkingDir()
+    prot.run()
+    mapper.commit()
+    mapper.close()
 
-        self.assertEqual(prot._steps[0].getStatus(), pwprot.STATUS_FINISHED)
-        
-        mapper2 = pwmapper.SqliteMapper(fn, mapperDict)
-        prot2 = mapper2.selectById(prot.getObjId())
-        
-        self.assertEqual(prot.endTime.get(), prot2.endTime.get())
+    assert prot._steps[0].getStatus() == pwprot.STATUS_FINISHED
 
-    def test_gpu_anonimization(self):
+    mapper2 = pwmapper.SqliteMapper(fn, mapperDict)
+    prot2 = mapper2.selectById(prot.getObjId())
 
-        self.assertEqual(pwprot.anonimizeGPUs([0, 1, 2]),[0, 1, 2], "Anonimization of GPUs does not work")
-        self.assertEqual(pwprot.anonimizeGPUs([2, 1, 0]), [0, 1, 2], "Anonimization of GPUs does not work")
-        self.assertEqual(pwprot.anonimizeGPUs([2, 1, 2]), [0, 1, 0], "Anonimization of GPUs does not work")
-        self.assertEqual(pwprot.anonimizeGPUs([2, 1, 2, 4]), [0, 1, 0, 2], "Anonimization of GPUs does not work")
-
-    def test_gpuSlots(self):
-        """ Test gpu slots are properly composed in combination of threads"""
-
-        # Test basic GPU setu methods
-        stepExecutor = pwprot.ThreadStepExecutor(None, 1, gpuList=None)
+    assert prot.endTime.get() == prot2.endTime.get()
 
 
-        self.assertEqual(stepExecutor.cleanVoidGPUs([0,1]), [0,1],
-                         "CleanVoidGpus does not work in absence of void GPUS")
-
-        self.assertEqual(stepExecutor.cleanVoidGPUs([0, VOID_GPU]), [0],
-                         "CleanVoidGpus does not work with a void GPU")
-
-        self.assertEqual(stepExecutor.cleanVoidGPUs([VOID_GPU, VOID_GPU]), [],
-                         "CleanVoidGpus does not work with all void GPU")
+def test_gpu_anonimization():
+    assert pwprot.anonimizeGPUs([0, 1, 2]) == [0, 1, 2], "Anonimization of GPUs does not work"
+    assert pwprot.anonimizeGPUs([2, 1, 0]) == [0, 1, 2], "Anonimization of GPUs does not work"
+    assert pwprot.anonimizeGPUs([2, 1, 2]) == [0, 1, 0], "Anonimization of GPUs does not work"
+    assert pwprot.anonimizeGPUs([2, 1, 2, 4]) == [0, 1, 0, 2], "Anonimization of GPUs does not work"
 
 
-        currThread = threading.currentThread()
-        def needForGPU():
-            return True
+def test_gpuSlots():
+    """ Test gpu slots are properly composed in combination of threads"""
+    # Test basic GPU setu methods
+    stepExecutor = pwprot.ThreadStepExecutor(None, 1, gpuList=None)
 
-        currThread.needsGPU =needForGPU
-        currThread.thId = 1
-        self.assertEqual(stepExecutor.getGpuList(),[], "Gpu list should be empty")
+    assert stepExecutor.cleanVoidGPUs([0, 1]) == [0, 1], "CleanVoidGpus does not work in absence of void GPUS"
+    assert stepExecutor.cleanVoidGPUs([0, VOID_GPU]) == [0], "CleanVoidGpus does not work with a void GPU"
+    assert stepExecutor.cleanVoidGPUs([VOID_GPU, VOID_GPU]) == [], "CleanVoidGpus does not work with all void GPU"
 
-        # 2 threads 1 GPU
-        stepExecutor = pwprot.ThreadStepExecutor(None, 2, gpuList=[1])
-        self.assertEqual(stepExecutor.getGpuList(),[1], "Gpu list should be [1]")
+    currThread = threading.current_thread()
 
-        currThread.thId = 2
-        self.assertEqual(stepExecutor.getGpuList(),[], "Gpu list should be empty after a second request")
+    def needForGPU():
+        return True
 
+    currThread.needsGPU = needForGPU
+    currThread.thId = 1
+    assert stepExecutor.getGpuList() == [], "Gpu list should be empty"
 
-        # 2 threads 3 GPUs
-        stepExecutor = pwprot.ThreadStepExecutor(None, 2, gpuList=[0,1,2])
-        self.assertEqual(stepExecutor.getGpuList(),[0,1], "Gpu list should be [0,1]")
+    # 2 threads 1 GPU
+    stepExecutor = pwprot.ThreadStepExecutor(None, 2, gpuList=[1])
+    assert stepExecutor.getGpuList() == [1], "Gpu list should be [1]"
 
-        currThread.thId = 1
-        self.assertEqual(stepExecutor.getGpuList(),[2], "Gpu list should be [2] after a second request")
+    currThread.thId = 2
+    assert stepExecutor.getGpuList() == [], "Gpu list should be empty after a second request"
 
+    # 2 threads 3 GPUs
+    stepExecutor = pwprot.ThreadStepExecutor(None, 2, gpuList=[0, 1, 2])
+    assert stepExecutor.getGpuList() == [0, 1], "Gpu list should be [0,1]"
 
-        # 2 threads 4 GPUs with void gpus
-        stepExecutor = pwprot.ThreadStepExecutor(None, 2, gpuList=[0,1,2, VOID_GPU])
-        self.assertEqual(stepExecutor.getGpuList(),[0,1], "Gpu list should be [0,1]")
+    currThread.thId = 1
+    assert stepExecutor.getGpuList() == [2], "Gpu list should be [2] after a second request"
 
-        currThread.thId = 2
-        self.assertEqual(stepExecutor.getGpuList(),[2], "Gpu list should be [2] after a second request without the void gpu")
+    # 2 threads 4 GPUs with void gpus
+    stepExecutor = pwprot.ThreadStepExecutor(None, 2, gpuList=[0, 1, 2, VOID_GPU])
+    assert stepExecutor.getGpuList() == [0, 1], "Gpu list should be [0,1]"
 
-        # less GPUs than threads. No extension should happen
-        stepExecutor = pwprot.ThreadStepExecutor(None, 4, gpuList=[0, VOID_GPU, 2])
-        self.assertEqual(stepExecutor.getGpuList(), [0], "Gpu list should not be extended")
+    currThread.thId = 2
+    assert stepExecutor.getGpuList() == [2], "Gpu list should be [2] after a second request without the void gpu"
 
-        currThread.thId = 1
-        self.assertEqual(stepExecutor.getGpuList(), [2],
-                         "Gpu list should be [2] after a second request, skipping the VOID gpu")
+    # less GPUs than threads. No extension should happen
+    stepExecutor = pwprot.ThreadStepExecutor(None, 4, gpuList=[0, VOID_GPU, 2])
+    assert stepExecutor.getGpuList() == [0], "Gpu list should not be extended"
 
-        currThread.thId = 3
-        self.assertEqual(stepExecutor.getGpuList(), [], "Gpu list should be empty ather all GPU slots are busy")
+    currThread.thId = 1
+    assert stepExecutor.getGpuList() == [2], "Gpu list should be [2] after a second request, skipping the VOID gpu"
 
-
-
-
-
-
+    currThread.thId = 3
+    assert stepExecutor.getGpuList() == [], "Gpu list should be empty ather all GPU slots are busy"

@@ -41,3 +41,19 @@ pyworkflowtests = "pyworkflowtests"
 [tool.setuptools.dynamic]
 version = {attr = "pyworkflow.__version__"}
 dependencies = {file = ["requirements.txt"]}
+
+[tool.pytest.ini_options]
+testpaths = ["pyworkflowtests/tests"]
+norecursedirs = ["pyworkflow/gui"]
+markers = [
+    "gui: needs a real or virtual (Xvfb) display - tkinter-backed tests",
+]
+# Needed before pyworkflow.config.Config is first imported, or SCIPION_HOME
+# silently defaults to os.getcwd() and breaks path resolution (e.g.
+# Project._loadHosts). pytest-env runs early enough to set it in time;
+# "D:" = only if not already set (e.g. by a real Scipion install).
+env = [
+    "D:SCIPION_HOME={HOME}/.cache/scipion_pyworkflow_test_home",
+    "D:SCIPION_DOMAIN=pyworkflowtests",
+    "D:SCIPION_TEST_NOSYNC=1",
+]

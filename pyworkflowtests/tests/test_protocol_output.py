@@ -27,132 +27,113 @@
 # **************************************************************************
 import os
 
+import pytest
+
 import pyworkflow as pw
-import pyworkflow.object as pwobj
-import pyworkflow.tests as pwtests
 import pyworkflow.mapper as pwmapper
+import pyworkflow.object as pwobj
 import pyworkflow.protocol as pwprot
 from pyworkflow.project import Project
-from pyworkflowtests.protocols import ProtOutputTest
 from pyworkflowtests import Domain, MockObject
+from pyworkflowtests.protocols import ProtOutputTest
+
+from .conftest import launchProtocol
 
 
-# Protocol to output of basic scipion objects
-class TestProtocolOutputs(pwtests.BaseTest):
-    @classmethod
-    def setUpClass(cls):
-        pwtests.setupTestProject(cls, writeLocalConfig=True)
-        pwtests.setupTestOutput(cls)
+def _assertOutput(prot, value=20):
+    # Check there is an output
+    assert hasattr(prot, 'oBoxSize'), "Protocol output boxSize (OInteger) not registered as attribute."
+    assert value == prot.oBoxSize.get(), (
+        "oBoxSize value is wrong: %s , expected %s" % (prot.oBoxSize, value)
+    )
 
-        # Set the application domain
-        pw.Config.setDomain("pyworkflowtests")
 
-    def test_basicObjectOutput(self):
-        """Test the list with several Complex"""
-        fn = self.getOutputPath("protocol.sqlite")
+def test_basicObjectOutput(testOutputPath):
+    """Test the list with several Complex"""
+    pw.Config.setDomain("pyworkflowtests")
 
-        # Discover objects and protocols
-        mapperDict = Domain.getMapperDict()
+    fn = os.path.join(testOutputPath, "protocol.sqlite")
 
-        mapper = pwmapper.SqliteMapper(fn, mapperDict)
-        # Associate the project
-        proj = Project(Domain, path=self.getOutputPath(''))
+    # Discover objects and protocols
+    mapperDict = Domain.getMapperDict()
 
-        prot = ProtOutputTest(mapper=mapper, n=2, project=proj,
-                              workingDir=self.getOutputPath(''))
+    mapper = pwmapper.SqliteMapper(fn, mapperDict)
+    # Associate the project
+    proj = Project(Domain, path=testOutputPath)
 
-        # Add and old style o, not in the outputs dictionary
-        prot.output1 = MockObject()
+    prot = ProtOutputTest(mapper=mapper, n=2, project=proj, workingDir=testOutputPath)
 
-        self.assertFalse(prot._useOutputList.get(),
-                         "useOutputList wrongly initialized")
+    # Add and old style o, not in the outputs dictionary
+    prot.output1 = MockObject()
 
-        outputs = [o for o in prot.iterOutputAttributes()]
-        self.assertTrue(1, len(outputs))
+    assert not prot._useOutputList.get(), "useOutputList wrongly initialized"
 
-        prot._stepsExecutor = pwprot.StepExecutor(hostConfig=None)
+    outputs = [o for o in prot.iterOutputAttributes()]
+    assert len(outputs) >= 1
 
-        #Create the logs folder
-        prot.makeWorkingDir()
+    prot._stepsExecutor = pwprot.StepExecutor(hostConfig=None)
 
-        prot.run()
+    # Create the logs folder
+    prot.makeWorkingDir()
 
-        self.assertEqual(prot._steps[0].getStatus(),
-                         pwprot.STATUS_FINISHED)
+    prot.run()
 
-        # Check there is an output
-        self.assertOutput(prot)
+    assert prot._steps[0].getStatus() == pwprot.STATUS_FINISHED
 
-        outputs = [o for o in prot.iterOutputAttributes()]
+    # Check there is an output
+    _assertOutput(prot)
 
-        # We are intentionally ignoring a protocol with o (EMObject)
-        # That has been continued, We do not find a real case now.
-        self.assertEqual(1, len(outputs),
-                         msg="Integer o not registered properly.")
+    outputs = [o for o in prot.iterOutputAttributes()]
 
-        outputs = [o for o in prot.iterOutputAttributes(pwobj.Integer)]
+    # We are intentionally ignoring a protocol with o (EMObject)
+    # That has been continued, We do not find a real case now.
+    assert len(outputs) == 1, "Integer o not registered properly."
 
-        # Test passing a filter
-        self.assertEqual(1, len(outputs),
-                         msg="Integer not matched when filtering outputs.")
+    outputs = [o for o in prot.iterOutputAttributes(pwobj.Integer)]
 
-        # Test with non existing class
-        class NotRealClass:
-            pass
+    # Test passing a filter
+    assert len(outputs) == 1, "Integer not matched when filtering outputs."
 
-        outputs = [o for o in prot.iterOutputAttributes(NotRealClass)]
+    # Test with non existing class
+    class NotRealClass:
+        pass
 
-        # Test passing a class
-        self.assertEqual(0, len(outputs),
-                         msg="Filter by class in iterOutputAttributes does "
-                             "not work.")
+    outputs = [o for o in prot.iterOutputAttributes(NotRealClass)]
 
-        self.assertTrue(prot._useOutputList.get(),
-                        "useOutputList not activated")
+    # Test passing a class
+    assert len(outputs) == 0, "Filter by class in iterOutputAttributes does not work."
 
-    def test_basicObjectInProject(self):
-        prot = self.newProtocol(ProtOutputTest,
-                                objLabel='to generate basic input')
-        print("working dir: %s" % prot.getWorkingDir())
-        # Define a negative output for later tests
-        prot._defineOutputs(negative=pwobj.Integer(-20))
-        self.launchProtocol(prot)
+    assert prot._useOutputList.get(), "useOutputList not activated"
 
-        # Default value is 10 so output is 20
-        self.assertOutput(prot)
 
-        # Second protocol to test linking
-        prot2 = self.newProtocol(ProtOutputTest,
-                                 objLabel='to read basic input')
+def test_basicObjectInProject(testProject):
+    prot = testProject.newProtocol(ProtOutputTest, objLabel='to generate basic input')
+    print("working dir: %s" % prot.getWorkingDir())
+    # Define a negative output for later tests
+    prot._defineOutputs(negative=pwobj.Integer(-20))
+    launchProtocol(testProject, prot)
 
-        # Set the pointer for the integer
-        prot2.iBoxSize.setPointer(pwobj.Pointer(prot, extended="oBoxSize"))
-        self.launchProtocol(prot2)
-        self.assertOutput(prot2, value=40)
+    # Default value is 10 so output is 20
+    _assertOutput(prot)
 
-        # Test validation: only positive numbers are allowed
-        prot3 = self.newProtocol(ProtOutputTest,
-                                 objLabel='invalid input',
-                                 iBoxSize=-10)
-        # We expect this to fail
-        with self.assertRaises(Exception):
-            self.launchProtocol(prot3)
-        # Test validation: pointer value is validated
-        prot4 = self.newProtocol(ProtOutputTest,
-                                 objLabel='invalid pointer input')
-        # Now use negative pointer output
-        prot4.iBoxSize.setPointer(pwobj.Pointer(prot, extended="negative"))
+    # Second protocol to test linking
+    prot2 = testProject.newProtocol(ProtOutputTest, objLabel='to read basic input')
 
-        # We expect this to fail
-        with self.assertRaises(Exception):
-            self.launchProtocol(prot4)
+    # Set the pointer for the integer
+    prot2.iBoxSize.setPointer(pwobj.Pointer(prot, extended="oBoxSize"))
+    launchProtocol(testProject, prot2)
+    _assertOutput(prot2, value=40)
 
-    def assertOutput(self, prot, value=20):
-        # Check there is an output
-        self.assertTrue(hasattr(prot, 'oBoxSize'),
-                        msg="Protocol output boxSize (OInteger) not registered"
-                            " as attribute.")
+    # Test validation: only positive numbers are allowed
+    prot3 = testProject.newProtocol(ProtOutputTest, objLabel='invalid input', iBoxSize=-10)
+    # We expect this to fail
+    with pytest.raises(Exception):
+        launchProtocol(testProject, prot3)
+    # Test validation: pointer value is validated
+    prot4 = testProject.newProtocol(ProtOutputTest, objLabel='invalid pointer input')
+    # Now use negative pointer output
+    prot4.iBoxSize.setPointer(pwobj.Pointer(prot, extended="negative"))
 
-        self.assertEqual(value, prot.oBoxSize.get(),
-                         "oBoxSize value is wrong: %s , expected %s" %
-                         (prot.oBoxSize, value))
+    # We expect this to fail
+    with pytest.raises(Exception):
+        launchProtocol(testProject, prot4)
