@@ -496,3 +496,198 @@ def test_Environ():
                 position=Environ.END)
     assert env3['PATH'] == env['PATH'] + os.pathsep + '/usr/local/xmipp'
     assert env3['LD_LIBRARY_PATH'] == env['LD_LIBRARY_PATH'] + os.pathsep + '/usr/local/xmipp/lib'
+
+
+def test_dottedAttributeAccess():
+    o = pwobj.Object()
+    o.child = pwobj.Object()
+    o.child.value = pwobj.Integer(5)
+
+    assert o.hasAttributeExt('child.value')
+    assert not o.hasAttributeExt('child.missing')
+    assert not o.hasAttributeExt('missing.value')
+
+    assert o.getAttributeValue('child.value') is None  # getAttributeValue does not resolve dots
+    assert o.child.getAttributeValue('value') == 5
+
+    o.setAttributeValue('child.value', 10)
+    assert o.child.value.get() == 10
+
+    # Missing attrName is ignored by default
+    o.setAttributeValue('child.missing', 1)
+    with pytest.raises(Exception):
+        o.setAttributeValue('child.missing', 1, ignoreMissing=False)
+
+
+def test_getNestedValue():
+    o = pwobj.Object()
+    o.child = pwobj.Object()
+    o.child.value = pwobj.Integer(7)
+
+    assert o.getNestedValue('child.value') == 7
+
+
+def test_cleanObjId():
+    parent = pwobj.Object()
+    parent.setObjId(1)
+    parent.child = pwobj.Integer(5)
+    parent.child.setObjId(2)
+
+    assert parent.hasObjId()
+    assert parent.child.hasObjId()
+
+    parent.cleanObjId()
+
+    assert not parent.hasObjId()
+    assert not parent.child.hasObjId()
+
+
+def test_getNameIdAndLastName():
+    o = pwobj.Object()
+    assert o.getNameId() == ''
+
+    o.setObjId(3)
+    o.setName('grandparent.parent.myself')
+    assert o.getNameId() == 'grandparent.parent.myself.3'
+    assert o.getLastName() == 'myself'
+
+    o.setObjLabel('a nice label')
+    assert o.getNameId() == 'a nice label'
+
+
+def test_isEnabled():
+    o = pwobj.Object()
+    assert o.isEnabled()
+    o.setEnabled(False)
+    assert not o.isEnabled()
+    o.setEnabled(1)
+    assert o.isEnabled() is True
+
+
+def test_evalCondition():
+    o = pwobj.Object()
+    o.hasCTF = pwobj.Boolean(True)
+    o.hasAlignment = pwobj.Boolean(False)
+
+    assert o.evalCondition('hasCTF')
+    assert not o.evalCondition('hasAlignment')
+    assert o.evalCondition('hasCTF and not hasAlignment')
+    assert not o.evalCondition('hasCTF and hasAlignment')
+
+
+@pytest.mark.parametrize(
+    "value, expectedType",
+    [
+        (5, pwobj.Integer),
+        (True, pwobj.Boolean),
+        (5.0, pwobj.Float),
+        ([1, 2, 3], pwobj.CsvList),
+        ("hello", pwobj.String),
+    ],
+)
+def test_ObjectWrap(value, expectedType):
+    wrapped = pwobj.ObjectWrap(value)
+    assert isinstance(wrapped, expectedType)
+
+
+def test_ObjectWrap_passthroughForObject():
+    i = pwobj.Integer(5)
+    assert pwobj.ObjectWrap(i) is i
+
+
+def test_List():
+    l = pwobj.List()
+    assert l.isEmpty()
+    assert l.getSize() == 0
+
+    i1 = pwobj.Integer(1)
+    i2 = pwobj.Integer(2)
+    l.append(i1)
+    l.append(i2)
+
+    assert l.getSize() == 2
+    assert not l.isEmpty()
+    assert l[0] is i1
+    assert l[1] is i2
+
+    names = [name for name, _ in l.getAttributes()]
+    assert names == ['__item__000001', '__item__000002']
+
+    l.clear()
+    assert l.isEmpty()
+
+
+def test_List_setFromList():
+    l = pwobj.List()
+    l.set([pwobj.Integer(1), pwobj.Integer(2), pwobj.Integer(3)])
+    assert l.getSize() == 3
+
+    with pytest.raises(Exception):
+        l.set("not a list")
+
+
+def test_PointerList_appendWrapsObjectsInPointers():
+    pl = pwobj.PointerList()
+    target = pwobj.Integer(5)
+
+    pl.append(target)
+    assert isinstance(pl[0], pwobj.Pointer)
+    assert pl[0].get() == 5
+
+    p = pwobj.Pointer(target)
+    pl.append(p)
+    assert pl[1] is p
+
+    with pytest.raises(Exception):
+        pl.append("not an object")
+
+
+def test_CsvList_fromStringAndList():
+    csv = pwobj.CsvList(pType=int)
+    csv.set("1,2,3")
+    assert list(csv) == [1, 2, 3]
+    assert csv.get() == "1,2,3"
+
+    csv2 = pwobj.CsvList(pType=int)
+    csv2.set([1, 2, 3])
+    assert csv == csv2
+
+    assert not csv.isEmpty()
+    csv.clear()
+    assert csv.isEmpty()
+
+
+def test_Scalar_comparisons():
+    a = pwobj.Integer(1)
+    b = pwobj.Integer(2)
+
+    assert a < b
+    assert a <= b
+    assert a <= pwobj.Integer(1)
+    assert b > a
+    assert b >= a
+    assert a != b
+    assert not (a == b)
+
+
+def test_Scalar_swap():
+    a = pwobj.Integer(1)
+    b = pwobj.Integer(2)
+    a.swap(b)
+    assert a.get() == 2
+    assert b.get() == 1
+
+
+def test_Integer_increment():
+    i = pwobj.Integer(1)
+    i.increment()
+    assert i.get() == 2
+
+
+def test_Float_equalAttributes_bothNone():
+    f1 = pwobj.Float()
+    f2 = pwobj.Float()
+    assert f1.equalAttributes(f2)
+
+    f1.set(1.0)
+    assert not f1.equalAttributes(f2)
