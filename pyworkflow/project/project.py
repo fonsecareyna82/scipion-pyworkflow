@@ -1257,6 +1257,7 @@ class Project(object):
         newProt.copyDefinitionAttributes(protocol)
         newProt.copyAttributes(protocol, 'hostName', '_useQueue', '_queueParams')
         newProt.runMode.set(MODE_RESTART)
+        newProt.runName.set(newProtLabel)
         newProt.cleanExecutionAttributes() # Clean jobIds and Pid; otherwise, this would retain old job IDs and PIDs.
 
         return newProt
@@ -1273,11 +1274,13 @@ class Project(object):
             # Handle the copy of a list of protocols
             # for this case we need to update the references of input/outputs
             newDict = {}
+            result = []
 
             for prot in protocol:
                 newProt = self.__cloneProtocol(prot)
                 newDict[prot.getObjId()] = newProt
                 self.saveProtocol(newProt)
+                result.append(newProt)
 
             g = self.getRunsGraph()
 
