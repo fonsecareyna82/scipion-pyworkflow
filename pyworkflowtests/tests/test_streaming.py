@@ -22,26 +22,15 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
-
-import pyworkflow.tests as pwtests
-
 from pyworkflow import Config
-from pyworkflowtests.protocols import  ConcurrencyProtocol
+from pyworkflowtests.protocols import ConcurrencyProtocol
+
+from .conftest import launchProtocol
 
 
-class TestConcurrency(pwtests.BaseTest):
-    
-    @classmethod
-    def setUpClass(cls):
-        pwtests.setupTestOutput(cls)
+def test_simple_steps_concurrency(testProject):
+    # Set the application domain
+    Config.setDomain("pyworkflowtests")
 
-    
-       # Set the application domain
-        Config.setDomain("pyworkflowtests")
-        pwtests.setupTestProject(cls)
-
-
-    def test_simple_steps_concurrency(self):
-        prot = self.newProtocol(ConcurrencyProtocol, numberOfThreads=3)
-
-        self.launchProtocol(prot)
+    prot = testProject.newProtocol(ConcurrencyProtocol, numberOfThreads=3)
+    launchProtocol(testProject, prot)

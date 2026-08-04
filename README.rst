@@ -60,8 +60,9 @@ Running tests
 
     conda activate scipion
     cd scipion-pyworkflow
-    export SCIPION_DOMAIN="pyworkflowtests/tests/mock_domain"
-    python -m unittest discover
+    export SCIPION_DOMAIN="pyworkflowtests"
+    export SCIPION_TEST_NOSYNC=1
+    python -m unittest discover -s pyworkflowtests/tests
 
     # Simple project GUI can be shown after running tests:
     python pyworkflow/apps/pw_project.py TestProtocolOutputs

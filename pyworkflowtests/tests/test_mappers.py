@@ -23,370 +23,436 @@
 # *  e-mail address 'scipion@cnb.csic.es'
 # *
 # **************************************************************************
+import os
 
+import pytest
 
 import pyworkflow as pw
-import pyworkflow.object as pwobj
-import pyworkflow.tests as pwtests
 import pyworkflow.mapper as pwmapper
+import pyworkflow.object as pwobj
+import pyworkflowtests
 from pyworkflow.mapper.sqlite import ID
 from pyworkflowtests.objects import Complex, MockImage
-import pyworkflowtests
 
 IMAGES_STK = 'images.stk'
 
 
-class TestSqliteMapper(pwtests.BaseTest):
-    @classmethod
-    def setUpClass(cls):
-        pwtests.setupTestOutput(cls)
+def test_SqliteMapper(testOutputPath):
+    fn = os.path.join(testOutputPath, "basic.sqlite")
+    mapper = pwmapper.SqliteMapper(fn)
 
-    def test_SqliteMapper(self):
-        fn = self.getOutputPath("basic.sqlite")
-        mapper = pwmapper.SqliteMapper(fn)
+    # Insert a Float
+    f = pwobj.Float(5.4)
+    mapper.insert(f)
 
-        # Insert a Float
-        f = pwobj.Float(5.4)
-        mapper.insert(f)
+    # Insert an pwobj.Integer
+    i = pwobj.Integer(1)
+    mapper.insert(i)
 
-        # Insert an pwobj.Integer
-        i = pwobj.Integer(1)
-        mapper.insert(i)
+    # Insert two pwobj.Boolean
+    b = pwobj.Boolean(False)
+    b2 = pwobj.Boolean(True)
+    mapper.insert(b)
+    mapper.insert(b2)
 
-        # Insert two pwobj.Boolean
-        b = pwobj.Boolean(False)
-        b2 = pwobj.Boolean(True)
-        mapper.insert(b)
-        mapper.insert(b2)
+    # Test storing pointers
+    p = pwobj.Pointer(b)
+    mapper.insert(p)
 
-        # Test storing pointers
-        p = pwobj.Pointer(b)
-        mapper.insert(p)
+    # Store csv list
+    strList = ['1', '2', '3']
+    csv = pwobj.CsvList()
+    csv += strList
+    mapper.insert(csv)
 
-        # Store csv list
-        strList = ['1', '2', '3']
-        csv = pwobj.CsvList()
-        csv += strList
-        mapper.insert(csv)
+    # Test normal List
+    iList = pwobj.List()
+    mapper.insert(iList)  # Insert the list when empty
+    i1 = pwobj.Integer(4)
+    i2 = pwobj.Integer(3)
+    iList.append(i1)
+    iList.append(i2)
+    mapper.update(iList)  # now update with some items inside
 
-        # Test normal List
-        iList = pwobj.List()
-        mapper.insert(iList)  # Insert the list when empty
-        i1 = pwobj.Integer(4)
-        i2 = pwobj.Integer(3)
-        iList.append(i1)
-        iList.append(i2)
-        mapper.update(iList)  # now update with some items inside
+    pList = pwobj.PointerList()
+    p1 = pwobj.Pointer(b)
+    p2 = pwobj.Pointer(b2)
+    pList.append(p1)
+    pList.append(p2)
+    mapper.store(pList)
 
-        pList = pwobj.PointerList()
-        p1 = pwobj.Pointer(b)
-        # p1.set(b)
-        p2 = pwobj.Pointer(b2)
-        # p2.set(b2)
-        pList.append(p1)
-        pList.append(p2)
-        mapper.store(pList)
+    # Test to add relations
+    relName = 'testRelation'
+    creator = f
+    mapper.insertRelation(relName, creator, i, b)
+    mapper.insertRelation(relName, creator, i, b2)
 
-        # Test to add relations
-        relName = 'testRelation'
-        creator = f
-        mapper.insertRelation(relName, creator, i, b)
-        mapper.insertRelation(relName, creator, i, b2)
+    mapper.insertRelation(relName, creator, b, p)
+    mapper.insertRelation(relName, creator, b2, p)
 
-        mapper.insertRelation(relName, creator, b, p)
-        mapper.insertRelation(relName, creator, b2, p)
+    # Save changes to file
+    mapper.commit()
+    assert mapper.db.getVersion() == 1
+    mapper.close()
 
-        # Save changes to file
-        mapper.commit()
-        self.assertEqual(1, mapper.db.getVersion())
-        mapper.close()
+    # Test using SqliteDb class
+    db = pwmapper.SqliteDb()
+    db._createConnection(fn, timeout=1000)
+    tables = ['Objects', 'Relations']
+    assert db.getTables() == tables
+    # Test getting the version, for the gold file it should be 0
+    assert db.getVersion() == 1
+    db.close()
 
-        # Test using SqliteDb class
-        db = pwmapper.SqliteDb()
-        db._createConnection(fn, timeout=1000)
-        tables = ['Objects', 'Relations']
-        self.assertEqual(tables, db.getTables())
-        # Test getting the version, for the gold file it should be 0
-        self.assertEqual(1, db.getVersion())
-        db.close()
+    # Reading test
+    mapper2 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+    print("Checking that Relations table is updated and version to 1")
+    assert mapper2.db.getVersion() == 1
+    # Check that the new column is properly added after updated to version 1
+    colNamesGold = ['id', 'parent_id', 'name', 'classname',
+                     'value', 'label', 'comment', 'object_parent_id',
+                     'object_child_id', 'creation',
+                     'object_parent_extended', 'object_child_extended']
+    colNames = [col[1] for col in mapper2.db.getTableColumns('Relations')]
+    assert colNames == colNamesGold
 
-        # Reading test
-        mapper2 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
-        print("Checking that Relations table is updated and version to 1")
-        self.assertEqual(1, mapper2.db.getVersion())
-        # Check that the new column is properly added after updated to version 1
-        colNamesGold = [u'id', u'parent_id', u'name', u'classname',
-                        u'value', u'label', u'comment', u'object_parent_id',
-                        u'object_child_id', u'creation',
-                        u'object_parent_extended', u'object_child_extended']
-        colNames = [col[1] for col in mapper2.db.getTableColumns('Relations')]
-        self.assertEqual(colNamesGold, colNames)
+    l = mapper2.selectByClass('Integer')[0]
+    assert l.get() == 1
 
-        l = mapper2.selectByClass('Integer')[0]
-        self.assertEqual(l.get(), 1)
+    f2 = mapper2.selectByClass('Float')[0]
+    assert f == f2.get()
 
-        f2 = mapper2.selectByClass('Float')[0]
-        self.assertEqual(f, f2.get())
+    b = mapper2.selectByClass('Boolean')[0]
+    assert not b.get()
 
-        b = mapper2.selectByClass('Boolean')[0]
-        self.assertTrue(not b.get())
+    p = mapper2.selectByClass('Pointer')[0]
+    assert b.get() == p.get()
 
-        p = mapper2.selectByClass('Pointer')[0]
-        self.assertEqual(b.get(), p.get())
+    csv2 = mapper2.selectByClass('CsvList')[0]
+    assert list.__eq__(csv2, strList)
 
-        csv2 = mapper2.selectByClass('CsvList')[0]
-        self.assertTrue(list.__eq__(csv2, strList))
+    # Iterate over all objects
+    allObj = mapper2.selectAll()
+    iterAllObj = mapper2.selectAll(iterate=True)
 
-        # Iterate over all objects
-        allObj = mapper2.selectAll()
-        iterAllObj = mapper2.selectAll(iterate=True)
+    for a1, a2 in zip(allObj, iterAllObj):
+        # Note compare the scalar objects, which have a well-defined comparison
+        if isinstance(a1, pwobj.Scalar):
+            assert a1 == a2
 
-        for a1, a2 in zip(allObj, iterAllObj):
-            # Note compare the scalar objects, which have a well-defined comparison
-            if isinstance(a1, pwobj.Scalar):
-                self.assertEqual(a1, a2)
+    # Test select all batch approach
+    mapper2.selectAllBatch()
 
-        # Test select all batch approach
-        allBatch = mapper2.selectAllBatch()
+    # Test relations
+    childs = mapper2.getRelationChilds(relName, i)
+    parents = mapper2.getRelationParents(relName, p)
+    # In this case both childs and parent should be the same
+    for c, p in zip(childs, parents):
+        assert c == p, "Childs of object i, should be the parents of object p"
 
-        # Test relations
-        childs = mapper2.getRelationChilds(relName, i)
-        parents = mapper2.getRelationParents(relName, p)
-        # In this case both childs and parent should be the same
-        for c, p in zip(childs, parents):
-            self.assertEqual(c, p,
-                             "Childs of object i, should be the parents of object p")
-
-        relations = mapper2.getRelationsByCreator(creator)
-        for row in relations:
-            print(dict(row))
-
-    def test_StorePointers(self):
-        """ Check that pointers are correctly stored. """
-        fn = self.getOutputPath("pointers.sqlite")
-
-        print(">>> Using db: ", fn)
-
-        mapper = pwmapper.SqliteMapper(fn)
-        # Insert a Complex
-        c = Complex.createComplex()  # real = 1, imag = 1
-        mapper.insert(c)
-        # Insert an pwobj.Integer
-        p1 = pwobj.Pointer(c)
-        p1.setExtended('real')
-
-        mapper.store(c)
-        mapper.store(p1)
-
-        self.assertAlmostEqual(c.real.get(), p1.get().get())
-
-        p1.set(None)  # Reset value and check that is stored properly
-
-        self.assertIsNone(p1._extended.get())
-        mapper.store(p1)
-        mapper.commit()
-
-        mapper2 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
-        p2 = mapper2.selectByClass('Pointer')[0]
-
-        # Check the mapper was properly stored when
-        # set to None and the _extended property cleaned
-        self.assertIsNone(p2.get())
-
-    def test_removeFromLists(self):
-        """ Check that lists are properly stored after removing some elements.
-        """
-        fn = self.getOutputPath("lists.sqlite")
-
-        print(">>> Using db: ", fn)
-
-        # Let's create a Mapper to store a simple List containing two integers
-        mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
-        iList = pwobj.List()
-        i1 = pwobj.Integer(4)
-        i2 = pwobj.Integer(3)
-        iList.append(i1)
-        iList.append(i2)
-        # Store the list and commit changes to db, then close db.
-        mapper.store(iList)
-        mapper.commit()
-        mapper.close()
-
-        # Now let's open again the db with a different connection
-        # and load the previously stored list
-        mapper2 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
-        iList2 = mapper2.selectByClass('List')[0]
-        # Let's do some basic checks
-        self.assertEqual(iList2.getSize(), 2)
-        self.assertTrue(pwobj.Integer(4) in iList2)
-        self.assertTrue(pwobj.Integer(3) in iList2)
-
-        # Now remove one of the integers in the list
-        # check consistency in the list elements
-        iList2.remove(pwobj.Integer(4))
-        self.assertEqual(iList2.getSize(), 1)
-        self.assertTrue(pwobj.Integer(4) not in iList2)
-        self.assertTrue(pwobj.Integer(3) in iList2)
-        # Store once again the new list with one element
-        mapper2.store(iList2)
-        mapper2.commit()
-        mapper2.close()
-
-        # Open the db and load the list once again
-        mapper3 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
-        iList3 = mapper3.selectByClass('List')[0]
-        # Check the same consistency before it was stored
-        self.assertEqual(iList3.getSize(), 1)
-        self.assertTrue(pwobj.Integer(4) not in iList3)
-        self.assertTrue(pwobj.Integer(3) in iList3)
+    relations = mapper2.getRelationsByCreator(creator)
+    for row in relations:
+        print(dict(row))
 
 
-class TestSqliteFlatMapper(pwtests.BaseTest):
-    """ Some tests for DataSet implementation. """
-    _labels = [pwtests.SMALL]
+def test_StorePointers(testOutputPath):
+    """ Check that pointers are correctly stored. """
+    fn = os.path.join(testOutputPath, "pointers.sqlite")
 
-    @classmethod
-    def setUpClass(cls):
-        pwtests.setupTestOutput(cls)
+    print(">>> Using db: ", fn)
 
-        # This isSet the application domain
-        pyworkflowtests.Domain = pyworkflowtests.TestDomain
-        pw.Config.setDomain("pyworkflowtests")
+    mapper = pwmapper.SqliteMapper(fn)
+    # Insert a Complex
+    c = Complex.createComplex()  # real = 1, imag = 1
+    mapper.insert(c)
+    # Insert an pwobj.Integer
+    p1 = pwobj.Pointer(c)
+    p1.setExtended('real')
 
-    # TODO: Maybe some mapper test for backward compatibility can be
-    def test_insertObjects(self):
-        dbName = self.getOutputPath('images.sqlite')
-        print(">>> test_insertObjects: dbName = '%s'" % dbName)
-        mapper = pwmapper.SqliteFlatMapper(dbName, pw.Config.getDomain().getMapperDict())
-        self.assertEqual(0, mapper.count())
-        self.assertEqual(0, mapper.maxId())
-        n = 10
+    mapper.store(c)
+    mapper.store(p1)
 
-        indexes = list(range(1, n + 1))
-        for i in indexes:
-            img = MockImage()
-            img.setLocation(i, IMAGES_STK)
-            img.setSamplingRate(i%2)
-            mapper.insert(img)
+    assert c.real.get() == pytest.approx(p1.get().get())
 
-        self.assertEqual(n, mapper.count())
-        self.assertEqual(n, mapper.maxId())
+    p1.set(None)  # Reset value and check that is stored properly
 
-        # Store one more image with bigger id
+    assert p1._extended.get() is None
+    mapper.store(p1)
+    mapper.commit()
+
+    mapper2 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+    p2 = mapper2.selectByClass('Pointer')[0]
+
+    # Check the mapper was properly stored when
+    # set to None and the _extended property cleaned
+    assert p2.get() is None
+
+
+def test_removeFromLists(testOutputPath):
+    """ Check that lists are properly stored after removing some elements.
+    """
+    fn = os.path.join(testOutputPath, "lists.sqlite")
+
+    print(">>> Using db: ", fn)
+
+    # Let's create a Mapper to store a simple List containing two integers
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+    iList = pwobj.List()
+    i1 = pwobj.Integer(4)
+    i2 = pwobj.Integer(3)
+    iList.append(i1)
+    iList.append(i2)
+    # Store the list and commit changes to db, then close db.
+    mapper.store(iList)
+    mapper.commit()
+    mapper.close()
+
+    # Now let's open again the db with a different connection
+    # and load the previously stored list
+    mapper2 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+    iList2 = mapper2.selectByClass('List')[0]
+    # Let's do some basic checks
+    assert iList2.getSize() == 2
+    assert pwobj.Integer(4) in iList2
+    assert pwobj.Integer(3) in iList2
+
+    # Now remove one of the integers in the list
+    # check consistency in the list elements
+    iList2.remove(pwobj.Integer(4))
+    assert iList2.getSize() == 1
+    assert pwobj.Integer(4) not in iList2
+    assert pwobj.Integer(3) in iList2
+    # Store once again the new list with one element
+    mapper2.store(iList2)
+    mapper2.commit()
+    mapper2.close()
+
+    # Open the db and load the list once again
+    mapper3 = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+    iList3 = mapper3.selectByClass('List')[0]
+    # Check the same consistency before it was stored
+    assert iList3.getSize() == 1
+    assert pwobj.Integer(4) not in iList3
+    assert pwobj.Integer(3) in iList3
+
+
+def test_SqliteMapper_deleteAndExists(testOutputPath):
+    fn = os.path.join(testOutputPath, "delete.sqlite")
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+
+    i1 = pwobj.Integer(1)
+    i2 = pwobj.Integer(2)
+    mapper.insert(i1)
+    mapper.insert(i2)
+    mapper.commit()
+
+    assert mapper.exists(i1.getObjId())
+    assert mapper.exists(i2.getObjId())
+
+    mapper.delete(i1)
+    mapper.commit()
+
+    assert not mapper.exists(i1.getObjId())
+    assert mapper.exists(i2.getObjId())
+    remainingIds = [o.getObjId() for o in mapper.selectAll()]
+    assert i1.getObjId() not in remainingIds
+    assert i2.getObjId() in remainingIds
+
+
+def test_SqliteMapper_deleteAll(testOutputPath):
+    fn = os.path.join(testOutputPath, "deleteall.sqlite")
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+
+    mapper.insert(pwobj.Integer(1))
+    mapper.insert(pwobj.Integer(2))
+    mapper.commit()
+    assert len(mapper.selectAll()) == 2
+
+    mapper.deleteAll()
+    mapper.commit()
+    assert len(mapper.selectAll()) == 0
+
+
+def test_SqliteMapper_getParentAndFullName(testOutputPath):
+    fn = os.path.join(testOutputPath, "parent.sqlite")
+    mapper = pwmapper.SqliteMapper(fn, pw.Config.getDomain().getMapperDict())
+
+    c = Complex.createComplex()
+    c.setName('myComplex')
+    mapper.insert(c)  # cascades to insert c.real / c.imag children
+    mapper.commit()
+
+    assert mapper.getParent(c) is None
+
+    real = mapper.selectById(c.real.getObjId())
+    parent = mapper.getParent(real)
+    assert parent.getObjId() == c.getObjId()
+
+    assert mapper.getFullName(c.real) == 'myComplex.real'
+
+
+def test_SqliteFlatMapper_deleteAndClear(testOutputPath):
+    _setMockDomain()
+    dbName = os.path.join(testOutputPath, 'flat_delete.sqlite')
+    mapper = pwmapper.SqliteFlatMapper(dbName, pw.Config.getDomain().getMapperDict())
+
+    images = []
+    for i in range(1, 4):
         img = MockImage()
-        bigId = 1000
-        img.setLocation(i + 1, IMAGES_STK)
-        img.setObjId(bigId)
+        img.setLocation(i, IMAGES_STK)
+        img.setObjId(i)  # SqliteFlatMapper.insert does not report the assigned id back
         mapper.insert(img)
-        self.assertEqual(bigId, mapper.maxId())
+        images.append(img)
+    mapper.commit()
+    assert mapper.count() == 3
 
-        # Insert another image with None as id, it should take bigId + 1
-        img.setLocation(i + 2, IMAGES_STK)
-        img.setObjId(None)
+    mapper.delete(images[0])
+    mapper.commit()
+    assert mapper.count() == 2
+
+    mapper.clear()
+    mapper.commit()
+    assert mapper.count() == 0
+
+
+def _setMockDomain():
+    # Some SqliteFlatMapper tests rely on the mock domain's mapper dict
+    # being explicitly (re)set - preserved from the original setUpClass.
+    pyworkflowtests.Domain = pyworkflowtests.TestDomain
+    pw.Config.setDomain("pyworkflowtests")
+
+
+def test_insertObjects(testOutputPath):
+    _setMockDomain()
+    dbName = os.path.join(testOutputPath, 'images.sqlite')
+    print(">>> test_insertObjects: dbName = '%s'" % dbName)
+    mapper = pwmapper.SqliteFlatMapper(dbName, pw.Config.getDomain().getMapperDict())
+    assert mapper.count() == 0
+    assert mapper.maxId() == 0
+    n = 10
+
+    indexes = list(range(1, n + 1))
+    for i in indexes:
+        img = MockImage()
+        img.setLocation(i, IMAGES_STK)
+        img.setSamplingRate(i % 2)
         mapper.insert(img)
-        self.assertEqual(bigId + 1, mapper.maxId())
 
-        mapper.setProperty('samplingRate', '3.0')
-        mapper.setProperty('defocusU', 1000)
-        mapper.setProperty('defocusV', 1000)
-        mapper.setProperty('defocusU', 2000)  # Test update a property value
-        mapper.deleteProperty('defocusV')  # Test delete a property
-        mapper.commit()
-        self.assertEqual(1, mapper.db.getVersion())
+    assert mapper.count() == n
+    assert mapper.maxId() == n
 
-        # Test where parsing
-        self.assertIsNone(mapper.db._whereToWhereStr(None), "A where = None does not return None")
-        self.assertEqual(mapper.db._whereToWhereStr("missing1=missing2"), "missing1=missing2", "a where with missing fields does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("_samplingRate=value2"), "c03=value2", "simple = where does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("_samplingRate=_samplingRate"), "c03=c03", "simple = where with 2 fields does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("_samplingRate = _samplingRate"), "c03 = c03", "simple = spaced where with 2 fields does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("_samplingRate < 3"), "c03 < 3", "a where with < does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("_samplingRate >= 4"), "c03 >= 4", "a where with >= does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("5 <= _samplingRate"), "5 <= c03", "a where with <= does not work")
-        self.assertEqual(mapper.db._whereToWhereStr("5 <= _samplingRate OR 3=_index"), "5 <= c03 OR 3=c01", "a where with OR does not work")
+    # Store one more image with bigger id
+    img = MockImage()
+    bigId = 1000
+    img.setLocation(i + 1, IMAGES_STK)
+    img.setObjId(bigId)
+    mapper.insert(img)
+    assert mapper.maxId() == bigId
 
-        # Tests actual where used in queries
-        self.assertEqual(len(mapper.unique(ID, "_index = 1 OR _index = 2")), 2, "unique with OR in where does not work.")
-        self.assertEqual(len(mapper.unique(ID, ID + " >= 20 ")), 2, "unique >= in where does not work.")
-        mapper.close()
+    # Insert another image with None as id, it should take bigId + 1
+    img.setLocation(i + 2, IMAGES_STK)
+    img.setObjId(None)
+    mapper.insert(img)
+    assert mapper.maxId() == bigId + 1
 
-        # Test that values were stored properly
-        mapper2 = pwmapper.SqliteFlatMapper(dbName, pw.Config.getDomain().getMapperDict())
-        indexes.extend([bigId, bigId + 1])
-        for i, obj in enumerate(mapper2.selectAll(iterate=True)):
-            self.assertEqual(obj.getIndex(), i + 1)
-            self.assertEqual(obj.getObjId(), indexes[i])
+    mapper.setProperty('samplingRate', '3.0')
+    mapper.setProperty('defocusU', 1000)
+    mapper.setProperty('defocusV', 1000)
+    mapper.setProperty('defocusU', 2000)  # Test update a property value
+    mapper.deleteProperty('defocusV')  # Test delete a property
+    mapper.commit()
+    assert mapper.db.getVersion() == 1
 
-        self.assertTrue(mapper2.hasProperty('samplingRate'))
-        self.assertTrue(mapper2.hasProperty('defocusU'))
-        self.assertFalse(mapper2.hasProperty('defocusV'))
+    # Test where parsing
+    assert mapper.db._whereToWhereStr(None) is None, "A where = None does not return None"
+    assert mapper.db._whereToWhereStr("missing1=missing2") == "missing1=missing2", "a where with missing fields does not work"
+    assert mapper.db._whereToWhereStr("_samplingRate=value2") == "c03=value2", "simple = where does not work"
+    assert mapper.db._whereToWhereStr("_samplingRate=_samplingRate") == "c03=c03", "simple = where with 2 fields does not work"
+    assert mapper.db._whereToWhereStr("_samplingRate = _samplingRate") == "c03 = c03", "simple = spaced where with 2 fields does not work"
+    assert mapper.db._whereToWhereStr("_samplingRate < 3") == "c03 < 3", "a where with < does not work"
+    assert mapper.db._whereToWhereStr("_samplingRate >= 4") == "c03 >= 4", "a where with >= does not work"
+    assert mapper.db._whereToWhereStr("5 <= _samplingRate") == "5 <= c03", "a where with <= does not work"
+    assert mapper.db._whereToWhereStr("5 <= _samplingRate OR 3=_index") == "5 <= c03 OR 3=c01", "a where with OR does not work"
 
-        self.assertEqual(mapper2.getProperty('samplingRate'), '3.0')
-        self.assertEqual(mapper2.getProperty('defocusU'), '2000')
+    # Tests actual where used in queries
+    assert len(mapper.unique(ID, "_index = 1 OR _index = 2")) == 2, "unique with OR in where does not work."
+    assert len(mapper.unique(ID, ID + " >= 20 ")) == 2, "unique >= in where does not work."
+    mapper.close()
 
-        # Make sure that maxId() returns the proper value after loading db
-        self.assertEqual(bigId + 1, mapper2.maxId())
+    # Test that values were stored properly
+    mapper2 = pwmapper.SqliteFlatMapper(dbName, pw.Config.getDomain().getMapperDict())
+    indexes.extend([bigId, bigId + 1])
+    for i, obj in enumerate(mapper2.selectAll(iterate=True)):
+        assert obj.getIndex() == i + 1
+        assert obj.getObjId() == indexes[i]
 
-        # test aggregation
-        result = mapper2.aggregate("COUNT", "id")  # As strings
-        self.assertEqual(result[0]["COUNT"], 12, "Aggregation fo count does not work")
+    assert mapper2.hasProperty('samplingRate')
+    assert mapper2.hasProperty('defocusU')
+    assert not mapper2.hasProperty('defocusV')
 
-        result = mapper2.aggregate(["COUNT"], ["id"])  # As lists
-        self.assertEqual(result[0]["COUNT"], 12, "Aggregation as list of count does not work")
+    assert mapper2.getProperty('samplingRate') == '3.0'
+    assert mapper2.getProperty('defocusU') == '2000'
 
-        result = mapper2.aggregate(["MAX","AVG"], "id")
-        self.assertEqual(result[0]["MAX"], bigId+1, "Aggregation  max, avg does not work")
-        self.assertAlmostEqual(result[0]["AVG"], 171.33, places=2, msg="Aggregation  max, avg does not work")
+    # Make sure that maxId() returns the proper value after loading db
+    assert mapper2.maxId() == bigId + 1
 
-        result = mapper2.aggregate(["MAX", "COUNT"], "_samplingRate", "id")
-        self.assertEqual(result[0]["MAX"], 1, "Aggregation max, grouped does not work")
-        self.assertEqual(result[0]["COUNT"], 1, "Aggregation  max, count does not work")
-        self.assertEqual(result[0]["id"], 1, "Aggregation  group field not returned")
+    # test aggregation
+    result = mapper2.aggregate("COUNT", "id")  # As strings
+    assert result[0]["COUNT"] == 12, "Aggregation fo count does not work"
 
-        # Aggregation on more than one field
-        result = mapper2.aggregate(["MAX"], ["id","_samplingRate"])
-        self.assertEqual(result[0]["MAX"], 1001, "Aggregation max, grouped does not work")
-        self.assertEqual(result[0]["MAX_samplingRate"], 1.0, "Aggregation  max, count does not work")
+    result = mapper2.aggregate(["COUNT"], ["id"])  # As lists
+    assert result[0]["COUNT"] == 12, "Aggregation as list of count does not work"
 
-    def test_emtpySet(self):
-        dbName = self.getOutputPath('empty.sqlite')
-        print(">>> test empty set: dbName = '%s'" % dbName)
-        # Check that writing an emtpy set do not fail
-        objSet = pwobj.Set(filename=dbName)
-        objSet.write()
-        objSet.close()
-        # Now let's try to open an empty set
-        objSet = pwobj.Set(filename=dbName)
-        self.assertEqual(objSet.getSize(), 0)
-        items = [obj.clone() for obj in objSet]
-        self.assertEqual(len(items), 0)
+    result = mapper2.aggregate(["MAX", "AVG"], "id")
+    assert result[0]["MAX"] == bigId + 1, "Aggregation  max, avg does not work"
+    assert result[0]["AVG"] == pytest.approx(171.33, abs=0.005), "Aggregation  max, avg does not work"
+
+    result = mapper2.aggregate(["MAX", "COUNT"], "_samplingRate", "id")
+    assert result[0]["MAX"] == 1, "Aggregation max, grouped does not work"
+    assert result[0]["COUNT"] == 1, "Aggregation  max, count does not work"
+    assert result[0]["id"] == 1, "Aggregation  group field not returned"
+
+    # Aggregation on more than one field
+    result = mapper2.aggregate(["MAX"], ["id", "_samplingRate"])
+    assert result[0]["MAX"] == 1001, "Aggregation max, grouped does not work"
+    assert result[0]["MAX_samplingRate"] == 1.0, "Aggregation  max, count does not work"
 
 
-class TestDataSet(pwtests.BaseTest):
-    """ Some tests for DataSet implementation. """
+def test_emtpySet(testOutputPath):
+    _setMockDomain()
+    dbName = os.path.join(testOutputPath, 'empty.sqlite')
+    print(">>> test empty set: dbName = '%s'" % dbName)
+    # Check that writing an emtpy set do not fail
+    objSet = pwobj.Set(filename=dbName)
+    objSet.write()
+    objSet.close()
+    # Now let's try to open an empty set
+    objSet = pwobj.Set(filename=dbName)
+    assert objSet.getSize() == 0
+    items = [obj.clone() for obj in objSet]
+    assert len(items) == 0
 
-    @classmethod
-    def setUpClass(cls):
-        pwtests.setupTestOutput(cls)
 
-    def test_Table(self):
-        from pyworkflow.utils.dataset import Table, Column
-        table = Table(Column('x', int, 5),
-                      Column('y', float, 0.0),
-                      Column('name', str))
+def test_Table():
+    from pyworkflow.utils.dataset import Column, Table
 
-        # Add a row to the table
-        table.addRow(1, x=12, y=11.0, name='jose')
-        table.addRow(2, x=22, y=21.0, name='juan')
-        table.addRow(3, x=32, y=31.0, name='pedro')
-        # Expect an exception, since name is not provided and have not default
-        self.assertRaises(Exception, table.addRow, 100, y=3.0)
-        row = table.getRow(1)
-        print(row)
-        self.assertEqual(table.getSize(), 3, "Bad table size")
+    table = Table(Column('x', int, 5),
+                  Column('y', float, 0.0),
+                  Column('name', str))
 
-        # Update a value of a row
-        table.updateRow(1, name='pepe')
-        row = table.getRow(1)
-        print(row)
-        self.assertEqual(row.name, 'pepe', "Error updating name in row")
+    # Add a row to the table
+    table.addRow(1, x=12, y=11.0, name='jose')
+    table.addRow(2, x=22, y=21.0, name='juan')
+    table.addRow(3, x=32, y=31.0, name='pedro')
+    # Expect an exception, since name is not provided and have not default
+    with pytest.raises(Exception):
+        table.addRow(100, y=3.0)
+    row = table.getRow(1)
+    print(row)
+    assert table.getSize() == 3, "Bad table size"
+
+    # Update a value of a row
+    table.updateRow(1, name='pepe')
+    row = table.getRow(1)
+    print(row)
+    assert row.name == 'pepe', "Error updating name in row"
