@@ -48,3 +48,7 @@ The core workflow engine underlying Scipion. Domain-agnostic by design — it kn
 ## If you're about to touch `pyworkflow/tests/tests.py`, `object.py`, or `plugin.py`
 
 These are the highest-blast-radius files in the ecosystem (used directly or transitively by every downstream repo and every external plugin). Prefer additive changes; if a change looks like it needs to be behavioral, flag it explicitly rather than proceeding — the actual impact usually can't be assessed from this repo alone (see `.ai/tech-debt.md` for confirmed cross-repo dependents).
+
+## Keeping this document current
+
+This file describes the repo as of the last time someone updated it — it will drift out of date as the code changes. If your change touches anything described above (architecture map, conventions, testing setup, gotchas), update the relevant section in this file as part of the same change, not as a separate follow-up. Don't wait to be asked.
