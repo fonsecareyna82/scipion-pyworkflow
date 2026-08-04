@@ -42,6 +42,17 @@ pyworkflowtests = "pyworkflowtests"
 version = {attr = "pyworkflow.__version__"}
 dependencies = {file = ["requirements.txt"]}
 
+[project.optional-dependencies]
+test = [
+    "pytest==8.3.5; python_version < '3.9'",
+    "pytest==8.4.2; python_version == '3.9'",
+    "pytest==9.1.1; python_version >= '3.10'",
+    "pytest-cov==5.0.0; python_version < '3.9'",
+    "pytest-cov==7.1.0; python_version >= '3.9'",
+    "pytest-env==1.1.5; python_version < '3.10'",
+    "pytest-env==1.7.0; python_version >= '3.10'",
+]
+
 [tool.pytest.ini_options]
 testpaths = ["pyworkflowtests/tests"]
 norecursedirs = ["pyworkflow/gui"]
