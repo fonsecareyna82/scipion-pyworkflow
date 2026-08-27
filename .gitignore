@@ -1,6 +1,7 @@
 ### Python binaries
 *.pyc
 *.pyo
+__pycache__
 
 #unused submodule
 .gitmodules
@@ -21,6 +22,7 @@ gmon.out
 \#*
 .\#*
 .directory
+.pytest_cache
 
 # Scratch files
 pyworkflow/foo
