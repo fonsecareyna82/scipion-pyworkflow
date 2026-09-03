@@ -206,3 +206,32 @@ def test_importCapabilityProviderValidateDefaultsToNoErrors():
 
 def test_importCapabilityProviderFileExtensionsDefaultEmpty():
     assert ImportCapabilityProvider.FILE_EXTENSIONS == []
+
+
+def test_isAvailableDefaultsToTrue():
+    assert _FakeImportProvider().isAvailable() is True
+
+
+class _SometimesAvailableProvider(ImportCapabilityProvider):
+    TARGET_PROTOCOLS = ['ProtImportParticles']
+    KEY = 'wrapped'
+    LABEL = 'Wrapped plugin'
+
+    def __init__(self, available):
+        self._available = available
+
+    def isAvailable(self):
+        return self._available
+
+
+def test_findCapabilityProvidersDoesNotFilterByAvailability(monkeypatch):
+    # findCapabilityProviders returns everything registered/targeted --
+    # filtering by isAvailable() is the caller's (pwem's) job, so a
+    # provider can still be found and, e.g., listed as "not installed".
+    unavailable = _SometimesAvailableProvider(available=False)
+    monkeypatch.setattr(Domain, '_capabilityProviders', {'wrapped': unavailable})
+    monkeypatch.setattr(Domain, '_capabilityProvidersLoaded', True)
+
+    matched = Domain.findCapabilityProviders('import', ProtImportParticles)
+    assert matched == [unavailable]
+    assert matched[0].isAvailable() is False

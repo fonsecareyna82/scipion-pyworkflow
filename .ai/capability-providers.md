@@ -33,6 +33,14 @@ commonly, a capability-specific subclass such as `ImportCapabilityProvider`) and
   exact `condition` string passed in, so they only render once this provider is selected. This is
   what lets ScipionAPI/ScipionWeb render the plugin's form fragment without either of those repos
   knowing anything about the plugin — see their own `.ai/`/`AGENTS.md` notes.
+- `isAvailable(self)` — defaults to `True`. A provider that IS its own plugin never needs to
+  override this: if the plugin isn't installed, its entry point simply isn't discoverable, so it
+  never reaches this check at all. This exists for the opposite case — a provider registered by a
+  *different*, always-installed package that wraps a still-not-migrated external plugin (see
+  `scipion-em`'s native provider wrappers for `emx`/`xmipp3`/`relion`/`frealign`/`eman`/`scipion`)
+  — there the wrapper class is always discoverable, but what it wraps may not be, so it probes with
+  `Domain.importFromPlugin(..., doRaise=False)` and reports the real availability. Callers building
+  a choice list (e.g. `ProtImportFiles._getImportChoices`) filter on this, not on discovery alone.
 
 `ImportCapabilityProvider(CapabilityProvider)` additionally declares:
 - `FILE_EXTENSIONS` — expected extension(s) of the input file, replacing the legacy positional

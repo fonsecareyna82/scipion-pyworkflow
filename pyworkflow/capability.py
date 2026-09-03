@@ -71,6 +71,25 @@ class CapabilityProvider:
         """
         pass
 
+    def isAvailable(self):
+        """ Return whether this provider can actually be used right now.
+        Defaults to True: a provider discovered through the
+        'pyworkflow.capability_provider' entry-point group is only
+        discoverable at all if its own package is installed, so for a
+        provider that IS its own plugin (the common case) simply existing
+        already implies availability.
+
+        Override this when a provider is a thin wrapper registered by a
+        *different* package than the one it actually depends on (e.g. a
+        pwem-native provider wrapping a still-unmigrated external plugin
+        via Domain.importFromPlugin) -- there, the wrapper class is always
+        discoverable, but the wrapped plugin may or may not be installed;
+        probe for it here (with Domain.importFromPlugin(..., doRaise=False),
+        which returns None instead of raising) so the choice list -- built
+        by filtering on this method -- only shows what is genuinely usable.
+        """
+        return True
+
 
 class ImportCapabilityProvider(CapabilityProvider):
     """ CapabilityProvider specialization for import protocols. """
