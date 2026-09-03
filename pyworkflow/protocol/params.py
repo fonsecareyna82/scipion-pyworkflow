@@ -458,13 +458,56 @@ class EnumParam(IntParam):
     DISPLAY_LIST = 0
     DISPLAY_COMBO = 1
     DISPLAY_HLIST = 2  # horizontal list, save space
-    
+
     def __init__(self, **args):
         IntParam.__init__(self, **args)
         self.choices = args.get('choices', [])
         self.display = Integer(args.get('display', EnumParam.DISPLAY_COMBO))
-    
-    
+
+
+class KeyedEnumParam(Param):
+    """ Select from a list of (key, label) choices, rendered the same way
+    as EnumParam, but the stored/compared value is a stable string KEY
+    instead of the choice's position in the list.
+
+    Use this instead of EnumParam whenever the choice list can be built
+    dynamically (e.g. from installed plugins via
+    pyworkflow.plugin.Domain.findCapabilityProviders) and may therefore
+    differ in size/order between two runs -- with a plain EnumParam, a
+    value saved as a positional index would silently point to the wrong
+    choice if the list changes; a KeyedEnumParam value keeps meaning
+    the same choice regardless of list order.
+
+    `choices` accepts either a list of (key, label) tuples, or a plain
+    list of strings (in which case key == label).
+    """
+    DISPLAY_LIST = 0
+    DISPLAY_COMBO = 1
+    DISPLAY_HLIST = 2  # horizontal list, save space
+
+    def __init__(self, **args):
+        Param.__init__(self, paramClass=String, **args)
+        rawChoices = args.get('choices', [])
+        self.choices = [
+            tuple(c) if isinstance(c, (tuple, list)) else (c, c)
+            for c in rawChoices
+        ]
+        self.display = Integer(args.get('display', KeyedEnumParam.DISPLAY_COMBO))
+
+    def getChoiceKeys(self):
+        """ Return just the keys, in display order. """
+        return [key for key, _ in self.choices]
+
+    def getChoiceLabel(self, key):
+        """ Return the label for a given key, or the key itself if it is
+        not (or no longer) among the registered choices -- e.g. a
+        previously-selected plugin format that got uninstalled. """
+        for choiceKey, label in self.choices:
+            if choiceKey == key:
+                return label
+        return key
+
+
 class FloatParam(Param):
     def __init__(self, **args):
         Param.__init__(self, paramClass=Float, **args)

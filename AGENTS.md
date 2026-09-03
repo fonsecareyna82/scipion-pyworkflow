@@ -5,6 +5,9 @@ Read this before making changes here. It's written for an AI coding agent, not e
 For deeper, less-frequently-needed context, see:
 - [`.ai/tech-debt.md`](.ai/tech-debt.md) — known problem areas, with file:line
 - [`.ai/roadmap.md`](.ai/roadmap.md) — planned/likely future work (draft, pending team review)
+- [`.ai/capability-providers.md`](.ai/capability-providers.md) — the `CapabilityProvider` plugin
+  registry contract and its entry-point-based discovery (`pyworkflow/capability.py`,
+  `Domain.getCapabilityProviders`/`findCapabilityProviders`)
 
 ## What this repo is
 
@@ -16,6 +19,7 @@ The core workflow engine underlying Scipion. Domain-agnostic by design — it kn
 - `pyworkflow/protocol/protocol.py` (~3000 lines) — `Step`, `FunctionStep`, and `Protocol(Step)`, the base class every EM protocol (in scipion-em and external plugins) inherits from.
 - `pyworkflow/mapper/` — generic SQLite persistence layer (`mapper.py`, `sqlite.py`, `sqlite_db.py`).
 - `pyworkflow/plugin.py` — `Domain` (plugin discovery via `importlib_metadata.entry_points(group='pyworkflow.plugin')`) and `Plugin` (abstract base every plugin module subclasses). This is how the whole ecosystem wires together at runtime instead of via hard imports.
+- `pyworkflow/capability.py` — `CapabilityProvider`/`ImportCapabilityProvider`: lets a plugin self-register (via the `pyworkflow.capability_provider` entry-point group, `Domain.getCapabilityProviders`/`findCapabilityProviders` in `plugin.py`) that it implements a capability (import today; the base is intentionally generic so future capability families reuse it unchanged) for a given protocol class, contributing its own form fields. See [`.ai/capability-providers.md`](.ai/capability-providers.md). Pairs with `pyworkflow.protocol.params.KeyedEnumParam` — an `EnumParam` variant whose value is a stable string key instead of a positional index, needed because a capability-provider-driven choice list can change size/order between runs.
 - `pyworkflow/project/` — project/manager/config: on-disk project structure, `hosts.conf` handling.
 - `pyworkflow/gui/` — the Tkinter desktop UI. **Being phased out** — ScipionAPI (state/event API) + ScipionWeb (React frontend) are the intended replacement. Don't invest effort here beyond what's asked.
 - `pyworkflow/apps/` — CLI entry-point scripts (`pw_project.py`, `pw_manager.py`, `pw_viewer.py`, ...), each runnable directly with `python pyworkflow/apps/pw_X.py`.

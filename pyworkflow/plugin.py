@@ -34,6 +34,7 @@ from pyworkflow import Variable, VariablesRegistry, VarTypes
 from .protocol import Protocol
 from .viewer import Viewer
 from .wizard import Wizard
+from .capability import CapabilityProvider
 
 logger = logging.getLogger(__name__)
 import glob
@@ -79,6 +80,8 @@ class Domain:
     _objects = {}
     _viewers = {}
     _wizards = {}
+    _capabilityProviders = {}
+    _capabilityProvidersLoaded = False
 
     # Preferred viewers:
     _preferred_viewers = None
@@ -335,6 +338,79 @@ class Domain:
     def getWizards(cls):
         """ Return all Wizard subclasses from all plugins for this domain."""
         return cls.__getSubclasses('wizards', cls._wizardClass)
+
+    @classmethod
+    def _discoverCapabilityProviders(cls):
+        """ Load all CapabilityProvider instances registered by any
+        installed plugin (or by this Domain's own package) via the
+        'pyworkflow.capability_provider' entry-point group.
+
+        Unlike getWizards/getViewers (submodule scan, imports every
+        plugin's fixed-name submodule), this reads entry-point metadata
+        without importing anything until a specific provider class is
+        actually needed (entry_point.load()) -- see
+        .ai/capability-providers.md for why.
+        """
+        if cls._capabilityProvidersLoaded:
+            return
+
+        providers = {}
+
+        for entryPoint in importlib_metadata.entry_points(
+                group='pyworkflow.capability_provider'):
+            try:
+                providerClass = entryPoint.load()
+                provider = providerClass()
+            except Exception as e:
+                logger.warning(
+                    "Can't load capability provider '%s': %s"
+                    % (entryPoint.name, e))
+                continue
+
+            if not isinstance(provider, CapabilityProvider):
+                logger.warning(
+                    "Capability provider '%s' does not extend "
+                    "CapabilityProvider, ignoring." % entryPoint.name)
+                continue
+
+            if not provider.CAPABILITY or not provider.KEY:
+                logger.warning(
+                    "Capability provider '%s' is missing CAPABILITY/KEY, "
+                    "ignoring." % entryPoint.name)
+                continue
+
+            if entryPoint.name in providers:
+                logger.info(
+                    "ERROR: Name collision (%s) detected while discovering "
+                    "capability providers." % entryPoint.name)
+                continue
+
+            providers[entryPoint.name] = provider
+
+        cls._capabilityProviders = providers
+        cls._capabilityProvidersLoaded = True
+
+    @classmethod
+    def getCapabilityProviders(cls, capability=None):
+        """ Return all registered CapabilityProvider instances, optionally
+        filtered by CAPABILITY (e.g. 'import'). """
+        cls._discoverCapabilityProviders()
+        providers = list(cls._capabilityProviders.values())
+        if capability is not None:
+            providers = [p for p in providers if p.CAPABILITY == capability]
+        return providers
+
+    @classmethod
+    def findCapabilityProviders(cls, capability, protocolClass):
+        """ Return the CapabilityProvider instances registered for
+        `capability` whose TARGET_PROTOCOLS matches `protocolClass`
+        (by class name, anywhere in its mro -- same matching convention
+        as Wizard._targets/findWizards). """
+        baseClasses = [c.__name__ for c in protocolClass.mro()]
+        return [
+            p for p in cls.getCapabilityProviders(capability)
+            if any(target in baseClasses for target in (p.TARGET_PROTOCOLS or []))
+        ]
 
     @classmethod
     def getMapperDict(cls):
