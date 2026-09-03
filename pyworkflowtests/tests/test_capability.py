@@ -194,3 +194,15 @@ def test_importCapabilityProviderRequiresOverride():
 
     with pytest.raises(NotImplementedError):
         Incomplete().importFrom(protocol=None)
+
+    with pytest.raises(NotImplementedError):
+        Incomplete().getFilePath(protocol=None)
+
+
+def test_importCapabilityProviderValidateDefaultsToNoErrors():
+    provider = _FakeImportProvider()
+    assert provider.validate(protocol=None) == []
+
+
+def test_importCapabilityProviderFileExtensionsDefaultEmpty():
+    assert ImportCapabilityProvider.FILE_EXTENSIONS == []

@@ -34,9 +34,21 @@ commonly, a capability-specific subclass such as `ImportCapabilityProvider`) and
   what lets ScipionAPI/ScipionWeb render the plugin's form fragment without either of those repos
   knowing anything about the plugin — see their own `.ai/`/`AGENTS.md` notes.
 
-`ImportCapabilityProvider(CapabilityProvider)` additionally declares `importFrom(self, protocol)`,
-replacing the logic that used to live inline in each import protocol's `getImportClass()`-style
-dispatch.
+`ImportCapabilityProvider(CapabilityProvider)` additionally declares:
+- `FILE_EXTENSIONS` — expected extension(s) of the input file, replacing the legacy positional
+  `importExts[importFrom.get() - 1]` lookup.
+- `getFilePath(self, protocol)` — the raw input file path this provider's own field(s) point to.
+- `validate(self, protocol)` — list of error strings, same convention as `Protocol._validate()`.
+- `importFrom(self, protocol)` — performs the import, replacing the logic that used to live inline
+  in each import protocol's `getImportClass()`-style dispatch.
+
+Deliberately **not** part of the contract: a two-phase "build an importer object, then call
+`.importParticles()`/`.validateParticles()` on it separately" shape (what `getImportClass()` does
+today). A provider implementation is free to build such an internal object if it wants to reuse
+existing plugin conversion code as-is (see `scipion-em-cryosparc2`'s migration, which wraps the
+existing `cryoSPARCImport` class exactly this way) — but the *contract* pwem depends on is the
+single `importFrom(protocol)` call plus the separate `validate(protocol)` call, not the object's
+shape.
 
 ## Discovery: entry-points, not submodule scan
 

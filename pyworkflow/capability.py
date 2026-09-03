@@ -77,6 +77,22 @@ class ImportCapabilityProvider(CapabilityProvider):
 
     CAPABILITY = 'import'
 
+    # Expected extension(s) of the input file this provider's form
+    # field(s) point to, e.g. ['cs']. Used for validation instead of the
+    # legacy positional importExts[importFrom.get() - 1] lookup.
+    FILE_EXTENSIONS = []
+
+    def getFilePath(self, protocol):
+        """ Return the raw input file path this provider's form field(s)
+        point to on `protocol` (e.g. protocol.csFile.get()). Called by the
+        base import protocol before validating/running the import. """
+        raise NotImplementedError
+
+    def validate(self, protocol):
+        """ Return a list of validation error strings for `protocol`
+        (empty list if valid), same convention as Protocol._validate(). """
+        return []
+
     def importFrom(self, protocol):
         """ Perform the import for `protocol` using this provider's format.
         Replaces the logic that today lives inline in each import
