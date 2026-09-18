@@ -168,11 +168,12 @@ class StepExecutor:
 class StepThread(threading.Thread):
     """ Thread to run Steps in parallel. """
 
-    def __init__(self, step, lock):
+    def __init__(self, step, lock, completionEvent=None):
         threading.Thread.__init__(self)
         self.thId = step.getObjId()
         self.step = step
         self.lock = lock
+        self.completionEvent = completionEvent
 
     def needsGPU(self):
         return self.step.needsGPU()
@@ -190,6 +191,9 @@ class StepThread(threading.Thread):
                     self.step.setFinished()
                 else:
                     self.step.setFailed(error)
+
+            if self.completionEvent is not None:
+                self.completionEvent.set()
 
 
 class ThreadStepExecutor(StepExecutor):
@@ -363,6 +367,7 @@ class ThreadStepExecutor(StepExecutor):
         lastCheck = datetime.datetime.now()
 
         sharedLock = threading.Lock()
+        completionEvent = threading.Event()
 
         runningSteps = {}  # currently running step in each node ({node: step})
         freeNodes = list(range(1, self.numberOfProcs + 1))  # available nodes to send jobs
@@ -370,6 +375,7 @@ class ThreadStepExecutor(StepExecutor):
         logger.info("Running steps using %s threads. 1 thread is used for this main process." % self.numberOfProcs)
 
         while True:
+            completionEvent.clear()
             # See which of the runningSteps are not really running anymore.
             # Update them and freeNodes, and call final callback for step.
             with sharedLock:
@@ -403,7 +409,7 @@ class ThreadStepExecutor(StepExecutor):
                         node = freeNodes.pop(0)  # take an available node
                         runningSteps[node] = step
                         logger.info("Running step %s on node %s" % (step, node))
-                        t = StepThread(step, sharedLock)
+                        t = StepThread(step, sharedLock, completionEvent)
                         # won't keep process up if main thread ends
                         t.daemon = True
                         t.start()
@@ -412,9 +418,16 @@ class ThreadStepExecutor(StepExecutor):
 
             if not anyLaunched:
                 logger.debug("Nothing launched in this loop")
-                if anyPending:  # nothing running
-                    logger.debug("There are steps pending. Waiting 3 secs")
-                    time.sleep(3)
+                if anyPending:
+                    if nodesFinished:
+                        logger.debug("Steps finished. Checking for newly runnable steps.")
+                        stepsCheckCallback()
+                        lastCheck = datetime.datetime.now()
+                        continue
+                    elapsed = (datetime.datetime.now() - lastCheck).total_seconds()
+                    waitSecs = max(0.0, stepsCheckSecs - elapsed)
+                    logger.debug("There are steps pending. Waiting for completion or %.3f secs", waitSecs)
+                    completionEvent.wait(timeout=waitSecs)
                 else:
                     logger.info("Nothing pending. Breaking the loop.")
                     break  # yeah, we are done, either failed or finished :)

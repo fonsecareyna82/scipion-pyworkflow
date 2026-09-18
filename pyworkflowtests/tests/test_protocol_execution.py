@@ -23,6 +23,7 @@
 # *
 # **************************************************************************
 import os
+import time
 import threading
 
 import pyworkflow.mapper as pwmapper
@@ -71,6 +72,53 @@ def test_gpu_anonimization():
     assert pwprot.anonimizeGPUs([2, 1, 0]) == [0, 1, 2], "Anonimization of GPUs does not work"
     assert pwprot.anonimizeGPUs([2, 1, 2]) == [0, 1, 0], "Anonimization of GPUs does not work"
     assert pwprot.anonimizeGPUs([2, 1, 2, 4]) == [0, 1, 0, 2], "Anonimization of GPUs does not work"
+
+
+def test_threadStepExecutorWakesWhenStepFinishes():
+    class FastStep(pwprot.Step):
+        def _run(self):
+            time.sleep(0.05)
+
+    first = FastStep(needsGPU=False)
+    first.setObjId(1)
+    second = FastStep(needsGPU=False)
+    second.setObjId(2)
+    second.addPrerequisites(1)
+
+    executor = pwprot.ThreadStepExecutor(None, 1, gpuList=None)
+    started = time.perf_counter()
+    executor.runSteps([first, second], lambda step: None, lambda step: True, lambda: None, stepsCheckSecs=5)
+    elapsed = time.perf_counter() - started
+
+    assert first.getStatus() == pwprot.STATUS_FINISHED
+    assert second.getStatus() == pwprot.STATUS_FINISHED
+    assert elapsed < 1.0
+
+
+def test_threadStepExecutorChecksWaitingStepsImmediatelyAfterCompletion():
+    class FastStep(pwprot.Step):
+        def _run(self):
+            time.sleep(0.05)
+
+    first = FastStep(needsGPU=False)
+    first.setObjId(1)
+    second = FastStep(needsGPU=False)
+    second.setObjId(2)
+    second.addPrerequisites(1)
+    second.setStatus(pwprot.STATUS_WAITING)
+
+    def checkSteps():
+        if first.isFinished() and second.isWaiting():
+            second.setStatus(pwprot.STATUS_NEW)
+
+    executor = pwprot.ThreadStepExecutor(None, 1, gpuList=None)
+    started = time.perf_counter()
+    executor.runSteps([first, second], lambda step: None, lambda step: True, checkSteps, stepsCheckSecs=5)
+    elapsed = time.perf_counter() - started
+
+    assert first.getStatus() == pwprot.STATUS_FINISHED
+    assert second.getStatus() == pwprot.STATUS_FINISHED
+    assert elapsed < 1.0
 
 
 def test_gpuSlots():
