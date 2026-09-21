@@ -202,3 +202,34 @@ def test_FunctionStepIdentityPreservesScipionObjectArguments():
         "Object arguments equivalent."
     )
 
+
+def test_threadStepExecutorDoesNotJoinUnrelatedThreads(monkeypatch):
+    class UnrelatedThread:
+        def join(self):
+            raise AssertionError(
+                "ThreadStepExecutor must not join threads it did not create."
+            )
+
+    currentThread = threading.current_thread()
+    unrelatedThread = UnrelatedThread()
+
+    monkeypatch.setattr(
+        threading,
+        "enumerate",
+        lambda: [currentThread, unrelatedThread],
+    )
+
+    executor = pwprot.ThreadStepExecutor(
+        None,
+        1,
+        gpuList=None,
+    )
+
+    executor.runSteps(
+        [],
+        lambda step: None,
+        lambda step: True,
+        lambda: None,
+        stepsCheckSecs=0,
+    )
+

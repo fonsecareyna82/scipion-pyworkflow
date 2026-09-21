@@ -370,6 +370,7 @@ class ThreadStepExecutor(StepExecutor):
         completionEvent = threading.Event()
 
         runningSteps = {}  # currently running step in each node ({node: step})
+        stepThreads = []  # only threads created by this executor
         freeNodes = list(range(1, self.numberOfProcs + 1))  # available nodes to send jobs
         logger.info("Execution threads: %s" % freeNodes)
         logger.info("Running steps using %s threads. 1 thread is used for this main process." % self.numberOfProcs)
@@ -413,6 +414,7 @@ class ThreadStepExecutor(StepExecutor):
                         # won't keep process up if main thread ends
                         t.daemon = True
                         t.start()
+                        stepThreads.append(t)
 
                 anyPending = self._arePending(steps)
 
@@ -439,10 +441,9 @@ class ThreadStepExecutor(StepExecutor):
 
         stepsCheckCallback()
 
-        # Wait for all threads now.
-        for t in threading.enumerate():
-            if t is not threading.current_thread():
-                t.join()
+        # Wait only for StepThreads created by this executor.
+        for t in stepThreads:
+            t.join()
 
     def _arePending(self, steps):
         """ Return True if there are pending steps (either running, waiting or new (not yet executed)
