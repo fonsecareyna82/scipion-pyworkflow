@@ -263,3 +263,54 @@ def test_threadStepExecutorUsesStepIndexWithoutPersistedObjId():
         "step persistence has not assigned an objId."
     )
 
+
+def test_threadStepExecutorFinalizesRunningSiblingsAfterStop():
+    secondStarted = threading.Event()
+    allowSecondFinish = threading.Event()
+    finishedCallbacks = []
+
+    class FirstStep(pwprot.Step):
+        def _run(self):
+            assert secondStarted.wait(timeout=2)
+
+    class SecondStep(pwprot.Step):
+        def _run(self):
+            secondStarted.set()
+            assert allowSecondFinish.wait(timeout=2)
+
+    first = FirstStep(needsGPU=False)
+    first.setObjId(1)
+
+    second = SecondStep(needsGPU=False)
+    second.setObjId(2)
+
+    def stepFinished(step):
+        finishedCallbacks.append(step.getObjId())
+
+        if step is first:
+            allowSecondFinish.set()
+            return False
+
+        return True
+
+    executor = pwprot.ThreadStepExecutor(
+        None,
+        2,
+        gpuList=None,
+    )
+
+    executor.runSteps(
+        [first, second],
+        lambda step: None,
+        stepFinished,
+        lambda: None,
+        stepsCheckSecs=5,
+    )
+
+    assert first.isFinished()
+    assert second.isFinished()
+    assert finishedCallbacks == [1, 2], (
+        "Every started StepThread must reach stepFinishedCallback even when "
+        "another parallel step stops further scheduling."
+    )
+

@@ -451,6 +451,13 @@ class ThreadStepExecutor(StepExecutor):
         for t in stepThreads:
             t.join()
 
+        # If scheduling stopped while sibling steps were still running,
+        # persist their final state after their threads have completed.
+        for node, step in list(runningSteps.items()):
+            runningSteps.pop(node)
+            self.freeGpusSlot(_getStepIdentifier(step))
+            stepFinishedCallback(step)
+
     def _arePending(self, steps):
         """ Return True if there are pending steps (either running, waiting or new (not yet executed)
         """
