@@ -1526,6 +1526,7 @@ class Protocol(Step):
             return doneSteps
 
         self._prevSteps = self.loadSteps()
+        invalidatedStepIndexes = set()
 
         n = min(len(self._steps), len(self._prevSteps))
         self.debug("len(steps) %s len(prevSteps) %s "
@@ -1534,8 +1535,14 @@ class Protocol(Step):
         for i in range(n):
             newStep = self._steps[i]
             oldStep = self._prevSteps[i]
+            prerequisiteInvalidated = any(
+                str(prerequisite) in invalidatedStepIndexes
+                for prerequisite in newStep.getPrerequisites()
+            )
             if (not oldStep.isFinished() or newStep != oldStep
-                    or not oldStep._postconditions()):
+                    or not oldStep._postconditions()
+                    or prerequisiteInvalidated):
+                invalidatedStepIndexes.add(str(newStep.getIndex()))
                 if pw.Config.debugOn():
                     self.info("Rerunning step %d" % i)
                     if not oldStep.isFinished():
@@ -1547,6 +1554,9 @@ class Protocol(Step):
                     elif not oldStep._postconditions():
                         self.info("     Old step: %s, args: %s postconditions were not met"
                                   % (oldStep.funcName, oldStep.argsStr))
+                    elif prerequisiteInvalidated:
+                        self.info("     Step %d depends on a step that must be rerun"
+                                  % newStep.getIndex())
 
             else:
                 doneSteps += 1

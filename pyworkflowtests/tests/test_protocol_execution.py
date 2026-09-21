@@ -314,3 +314,67 @@ def test_threadStepExecutorFinalizesRunningSiblingsAfterStop():
         "another parallel step stops further scheduling."
     )
 
+def test_resumeRerunsStepWhenPrerequisiteWasInvalidated():
+    def makeStep(name, argument, index, prerequisite=None, finished=False):
+        step = pwprot.FunctionStep(
+            lambda value: None,
+            name,
+            argument,
+            needsGPU=False,
+        )
+        step.setIndex(index)
+
+        if prerequisite is not None:
+            step.addPrerequisites(prerequisite)
+
+        if finished:
+            step.setFinished()
+
+        return step
+
+    oldFirst = makeStep("first", "same", 1, finished=True)
+    oldSecond = makeStep("second", "old", 2, prerequisite=1, finished=True)
+    oldThird = makeStep("third", "same", 3, prerequisite=2, finished=True)
+
+    newFirst = makeStep("first", "same", 1)
+    newSecond = makeStep("second", "new", 2, prerequisite=1)
+    newThird = makeStep("third", "same", 3, prerequisite=2)
+
+    class ResumeProtocolStub:
+        runMode = pwprot.MODE_RESUME
+
+        def __init__(self):
+            self._steps = [
+                newFirst,
+                newSecond,
+                newThird,
+            ]
+            self._prevSteps = []
+
+        def loadSteps(self):
+            return [
+                oldFirst,
+                oldSecond,
+                oldThird,
+            ]
+
+        def debug(self, *args, **kwargs):
+            pass
+
+        def info(self, *args, **kwargs):
+            pass
+
+    protocol = ResumeProtocolStub()
+
+    doneSteps = pwprot.Protocol._Protocol__updateDoneSteps(
+        protocol
+    )
+
+    assert newFirst.isFinished()
+    assert newSecond.isNew()
+    assert newThird.isNew(), (
+        "Resume must rerun a finished step when one of its prerequisites "
+        "was invalidated and must be recomputed."
+    )
+    assert doneSteps == 1
+
