@@ -165,12 +165,18 @@ class StepExecutor:
         stepsCheckCallback()  # one last check to finalize stuff
 
 
+def _getStepIdentifier(step):
+    """Return the persisted step id or fall back to its protocol index."""
+    stepId = step.getObjId()
+    return step.getIndex() if stepId is None else stepId
+
+
 class StepThread(threading.Thread):
     """ Thread to run Steps in parallel. """
 
     def __init__(self, step, lock, completionEvent=None):
         threading.Thread.__init__(self)
-        self.thId = step.getObjId()
+        self.thId = _getStepIdentifier(step)
         self.step = step
         self.lock = lock
         self.completionEvent = completionEvent
@@ -341,7 +347,7 @@ class ThreadStepExecutor(StepExecutor):
     def _isStepRunnable(self, step):
         """ Overwrite this method to check GPUs availability"""
 
-        if self.gpuList and step.needsGPU() and self.getFreeGpuSlot(step.getObjId()) is None:
+        if self.gpuList and step.needsGPU() and self.getFreeGpuSlot(_getStepIdentifier(step)) is None:
             # logger.info("Can't run step %s. Needs gpus and there are no free gpu slots" % step)
             return False
 
@@ -386,7 +392,7 @@ class ThreadStepExecutor(StepExecutor):
             for node in nodesFinished:
                 step = runningSteps.pop(node)  # remove entry from runningSteps
                 freeNodes.append(node)  # the node is available now
-                self.freeGpusSlot(step.getObjId())
+                self.freeGpusSlot(_getStepIdentifier(step))
                 # Notify steps termination and check if we should continue
                 doContinue = stepFinishedCallback(step)
                 if not doContinue:

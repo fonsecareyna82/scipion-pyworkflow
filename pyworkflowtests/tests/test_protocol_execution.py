@@ -233,3 +233,33 @@ def test_threadStepExecutorDoesNotJoinUnrelatedThreads(monkeypatch):
         stepsCheckSecs=0,
     )
 
+
+def test_threadStepExecutorUsesStepIndexWithoutPersistedObjId():
+    step = pwprot.Step(needsGPU=True)
+    step.setIndex(7)
+
+    assert step.getObjId() is None
+
+    executor = pwprot.ThreadStepExecutor(
+        None,
+        1,
+        gpuList=[3],
+    )
+
+    assert executor._isStepRunnable(step)
+
+    assert executor.gpuDict.get(7) == [3], (
+        "A Step without a persisted objId must reserve its GPU slot "
+        "using the protocol step index."
+    )
+
+    stepThread = pwprot.StepThread(
+        step,
+        threading.Lock(),
+    )
+
+    assert stepThread.thId == 7, (
+        "StepThread must use the protocol step index when alternative "
+        "step persistence has not assigned an objId."
+    )
+
