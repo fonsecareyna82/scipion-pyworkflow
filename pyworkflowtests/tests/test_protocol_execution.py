@@ -28,6 +28,7 @@ import threading
 
 import pyworkflow.mapper as pwmapper
 import pyworkflow.protocol as pwprot
+from pyworkflow.object import Object
 from pyworkflow.project import Project
 from pyworkflow.protocol.constants import VOID_GPU
 from pyworkflowtests import Domain
@@ -169,3 +170,35 @@ def test_gpuSlots():
 
     currThread.thId = 3
     assert stepExecutor.getGpuList() == [], "Gpu list should be empty ather all GPU slots are busy"
+
+
+def test_FunctionStepIdentityPreservesScipionObjectArguments():
+    firstArg = Object()
+    firstArg.setObjId(101)
+
+    secondArg = Object()
+    secondArg.setObjId(202)
+
+    def processObject(_obj):
+        pass
+
+    firstStep = pwprot.FunctionStep(
+        processObject,
+        "processObject",
+        firstArg,
+    )
+    secondStep = pwprot.FunctionStep(
+        processObject,
+        "processObject",
+        secondArg,
+    )
+
+    assert firstStep.argsStr.get() != secondStep.argsStr.get(), (
+        "FunctionStep persistence must preserve the identity of distinct "
+        "Scipion Object arguments instead of serializing both as null."
+    )
+    assert firstStep != secondStep, (
+        "Resume matching must not consider steps for different Scipion "
+        "Object arguments equivalent."
+    )
+

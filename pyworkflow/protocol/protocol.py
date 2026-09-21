@@ -378,6 +378,21 @@ class FunctionStep(Step):
     This class will ease the insertion of Protocol function steps
     through the function _insertFunctionStep"""
 
+    @staticmethod
+    def _serializeArgument(value):
+        """Preserve stable identity for Scipion Object step arguments."""
+        if isinstance(value, Object):
+            objectClass = value.getClass()
+            return {
+                "__scipionObject__": {
+                    "class": objectClass.__name__,
+                    "id": value.getObjId(),
+                }
+            }
+
+        # Preserve the previous fallback for unsupported non-Scipion values.
+        return None
+
     def __init__(self, func=None, funcName=None, *funcArgs,  wait=False, interactive=False, needsGPU=True):
         """
          Params:
@@ -390,7 +405,12 @@ class FunctionStep(Step):
         self._func = func  # Function should be set before run
         self._args = funcArgs
         self.funcName = String(funcName)
-        self.argsStr = String(json.dumps(funcArgs, default=lambda x: None))
+        self.argsStr = String(
+            json.dumps(
+                funcArgs,
+                default=self._serializeArgument,
+            )
+        )
         if wait:
             self.setStatus(STATUS_WAITING)
 
