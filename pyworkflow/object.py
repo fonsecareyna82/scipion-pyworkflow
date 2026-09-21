@@ -1446,19 +1446,25 @@ class Set(Object):
 
     # ******* Streaming helpers to deal with sets **********
     def hasChangedSince(self, time):
-        """ Returns if the set has changed since the timestamp passed as parameter. It will check
-                the last modified time of the file this set uses to persists.
+        """Return whether this Set may have changed since the given time.
 
-        :parameter time: timestamp to compare to the last modification time  """
-
+        File-backed Sets use the persistence file mtime. PostgreSQL runtime
+        Sets must not use their compatibility SQLite snapshot as the source
+        of truth for logical changes.
+        """
         if time is None:
             return True
 
-        # Get the file name
-        localFile = self.getFileName()
+        isPostgresqlRuntimeOutput = getattr(
+            self, "isPostgresqlRuntimeOutput", None
+        )
+        if (
+            callable(isPostgresqlRuntimeOutput)
+            and isPostgresqlRuntimeOutput()
+        ):
+            return True
 
-        #self.lastCheck = getattr(self, 'lastCheck', now)
-        # Get the last time it was modified
+        localFile = self.getFileName()
         modTime = dt.datetime.fromtimestamp(getmtime(localFile))
         return time < modTime
 

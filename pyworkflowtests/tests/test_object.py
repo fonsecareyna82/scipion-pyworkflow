@@ -257,6 +257,24 @@ def test_Pointer(testOutputPath):
     assert NUMERIC_ATTRIBUTE_VALUE == ptr5.get()
 
 
+
+def test_PostgresqlSetHasChangedSinceDoesNotTrustPhysicalMtime(monkeypatch):
+    imgSet = MockSetOfImages()
+    imgSet.getFileName = lambda: "/tmp/postgresql-compat.sqlite"
+    imgSet.isPostgresqlRuntimeOutput = lambda: True
+
+    monkeypatch.setattr(
+        pwobj,
+        "getmtime",
+        lambda _fileName: 0,
+    )
+
+    assert imgSet.hasChangedSince(dt.datetime.now()), (
+        "PostgreSQL runtime Sets must not use the compatibility SQLite "
+        "mtime as proof that the logical Set has not changed."
+    )
+
+
 def test_Sets(testOutputPath):
     stackFn = IMAGES_STK
     fn = os.path.join(testOutputPath, 'test_images2.sqlite')
