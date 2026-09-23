@@ -1650,7 +1650,8 @@ class Protocol(Step):
                 "Protocol failed: " + step.getErrorMessage())
             self.setFailed(errorMsg)
             self.error(errorMsg)
-        self.lastStatus = step.getStatus()
+        if self.lastStatus != STATUS_FAILED:
+            self.lastStatus = step.getStatus()
 
         self.__updateStep(step)
         self._stepsDone.increment()
