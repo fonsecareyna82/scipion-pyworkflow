@@ -381,82 +381,85 @@ class ThreadStepExecutor(StepExecutor):
         logger.info("Execution threads: %s" % freeNodes)
         logger.info("Running steps using %s threads. 1 thread is used for this main process." % self.numberOfProcs)
 
-        while True:
-            completionEvent.clear()
-            # See which of the runningSteps are not really running anymore.
-            # Update them and freeNodes, and call final callback for step.
-            with sharedLock:
-                nodesFinished = [node for node, step in runningSteps.items()
-                                 if not step.isRunning()]
-            doContinue = True
-            for node in nodesFinished:
-                step = runningSteps.pop(node)  # remove entry from runningSteps
-                freeNodes.append(node)  # the node is available now
-                self.freeGpusSlot(_getStepIdentifier(step))
-                # Notify steps termination and check if we should continue
-                doContinue = stepFinishedCallback(step)
+        try:
+            while True:
+                completionEvent.clear()
+                # See which of the runningSteps are not really running anymore.
+                # Update them and freeNodes, and call final callback for step.
+                with sharedLock:
+                    nodesFinished = [node for node, step in runningSteps.items()
+                                     if not step.isRunning()]
+                doContinue = True
+                for node in nodesFinished:
+                    step = runningSteps.pop(node)  # remove entry from runningSteps
+                    freeNodes.append(node)  # the node is available now
+                    self.freeGpusSlot(_getStepIdentifier(step))
+                    # Notify steps termination and check if we should continue
+                    doContinue = stepFinishedCallback(step)
+                    if not doContinue:
+                        break
+
                 if not doContinue:
                     break
 
-            if not doContinue:
-                break
+                anyLaunched = False
+                # If there are available nodes, send next runnable step.
+                with sharedLock:
+                    if freeNodes:
+                        runnableSteps = self._getRunnable(steps, len(freeNodes))
 
-            anyLaunched = False
-            # If there are available nodes, send next runnable step.
-            with sharedLock:
-                if freeNodes:
-                    runnableSteps = self._getRunnable(steps, len(freeNodes))
+                        for step in runnableSteps:
+                            # We found a step to work in, so let's start a new
+                            # thread to do the job and book it.
+                            anyLaunched = True
+                            step.setRunning()
+                            stepStartedCallback(step)
+                            node = freeNodes.pop(0)  # take an available node
+                            runningSteps[node] = step
+                            logger.info("Running step %s on node %s" % (step, node))
+                            t = StepThread(step, sharedLock, completionEvent)
+                            # won't keep process up if main thread ends
+                            t.daemon = True
+                            t.start()
+                            stepThreads.append(t)
 
-                    for step in runnableSteps:
-                        # We found a step to work in, so let's start a new
-                        # thread to do the job and book it.
-                        anyLaunched = True
-                        step.setRunning()
-                        stepStartedCallback(step)
-                        node = freeNodes.pop(0)  # take an available node
-                        runningSteps[node] = step
-                        logger.info("Running step %s on node %s" % (step, node))
-                        t = StepThread(step, sharedLock, completionEvent)
-                        # won't keep process up if main thread ends
-                        t.daemon = True
-                        t.start()
-                        stepThreads.append(t)
+                    anyPending = self._arePending(steps)
 
-                anyPending = self._arePending(steps)
+                if not anyLaunched:
+                    logger.debug("Nothing launched in this loop")
+                    if anyPending:
+                        if nodesFinished:
+                            logger.debug("Steps finished. Checking for newly runnable steps.")
+                            stepsCheckCallback()
+                            lastCheck = datetime.datetime.now()
+                            continue
+                        elapsed = (datetime.datetime.now() - lastCheck).total_seconds()
+                        waitSecs = max(0.0, stepsCheckSecs - elapsed)
+                        logger.debug("There are steps pending. Waiting for completion or %.3f secs", waitSecs)
+                        completionEvent.wait(timeout=waitSecs)
+                    else:
+                        logger.info("Nothing pending. Breaking the loop.")
+                        break  # yeah, we are done, either failed or finished :)
 
-            if not anyLaunched:
-                logger.debug("Nothing launched in this loop")
-                if anyPending:
-                    if nodesFinished:
-                        logger.debug("Steps finished. Checking for newly runnable steps.")
-                        stepsCheckCallback()
-                        lastCheck = datetime.datetime.now()
-                        continue
-                    elapsed = (datetime.datetime.now() - lastCheck).total_seconds()
-                    waitSecs = max(0.0, stepsCheckSecs - elapsed)
-                    logger.debug("There are steps pending. Waiting for completion or %.3f secs", waitSecs)
-                    completionEvent.wait(timeout=waitSecs)
-                else:
-                    logger.info("Nothing pending. Breaking the loop.")
-                    break  # yeah, we are done, either failed or finished :)
+                now = datetime.datetime.now()
+                if now - lastCheck > delta:
+                    stepsCheckCallback()
+                    lastCheck = now
 
-            now = datetime.datetime.now()
-            if now - lastCheck > delta:
-                stepsCheckCallback()
-                lastCheck = now
+            stepsCheckCallback()
 
-        stepsCheckCallback()
+        finally:
+            # Always wait for StepThreads created by this executor, even if
+            # scheduling/streaming checks fail in the main executor thread.
+            for t in stepThreads:
+                t.join()
 
-        # Wait only for StepThreads created by this executor.
-        for t in stepThreads:
-            t.join()
-
-        # If scheduling stopped while sibling steps were still running,
-        # persist their final state after their threads have completed.
-        for node, step in list(runningSteps.items()):
-            runningSteps.pop(node)
-            self.freeGpusSlot(_getStepIdentifier(step))
-            stepFinishedCallback(step)
+            # Persist the final state of every step that was still running
+            # when scheduling stopped or raised.
+            for node, step in list(runningSteps.items()):
+                runningSteps.pop(node)
+                self.freeGpusSlot(_getStepIdentifier(step))
+                stepFinishedCallback(step)
 
     def _arePending(self, steps):
         """ Return True if there are pending steps (either running, waiting or new (not yet executed)

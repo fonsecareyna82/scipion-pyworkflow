@@ -25,6 +25,9 @@
 import os
 import time
 import threading
+import unittest
+
+import pytest
 
 import pyworkflow.mapper as pwmapper
 import pyworkflow.protocol as pwprot
@@ -313,6 +316,122 @@ def test_threadStepExecutorFinalizesRunningSiblingsAfterStop():
         "Every started StepThread must reach stepFinishedCallback even when "
         "another parallel step stops further scheduling."
     )
+
+
+class TestThreadStepExecutorFailureCleanup(unittest.TestCase):
+    def testWaitsForRunningStepsWhenStepsCheckFails(self):
+        workerStarted = threading.Event()
+        workerFinished = threading.Event()
+
+        class SlowStep(pwprot.Step):
+            def _run(self):
+                workerStarted.set()
+                time.sleep(0.25)
+                workerFinished.set()
+
+        step = SlowStep(needsGPU=False)
+        step.setObjId(1)
+
+        def failingStepsCheck():
+            self.assertTrue(workerStarted.wait(timeout=1))
+            raise RuntimeError("steps check failed")
+
+        executor = pwprot.ThreadStepExecutor(
+            None,
+            1,
+            gpuList=None,
+        )
+
+        with self.assertRaisesRegex(
+                RuntimeError,
+                "steps check failed",
+        ):
+            executor.runSteps(
+                [step],
+                lambda currentStep: None,
+                lambda currentStep: True,
+                failingStepsCheck,
+                stepsCheckSecs=0,
+            )
+
+        finishedBeforeReturn = workerFinished.is_set()
+        workerFinished.wait(timeout=1)
+
+        self.assertTrue(
+            finishedBeforeReturn,
+            "ThreadStepExecutor must wait for its running StepThreads before "
+            "propagating an exception raised by stepsCheckCallback.",
+        )
+
+    def testProtocolFailsWhenStepsCheckRaises(self):
+        workerStarted = threading.Event()
+        workerFinished = threading.Event()
+
+        class FailingStepsCheckProtocol(pwprot.Protocol):
+            stepsExecutionMode = pwprot.STEPS_PARALLEL
+
+            def _defineParams(self, form):
+                pass
+
+            def validate(self):
+                return []
+
+            def _insertAllSteps(self):
+                self._insertFunctionStep(
+                    self.workerStep,
+                    prerequisites=[],
+                    needsGPU=False,
+                )
+
+            def workerStep(self):
+                workerStarted.set()
+                time.sleep(0.2)
+                workerFinished.set()
+
+            def _stepsCheck(self):
+                self.assertWorkerStarted()
+                raise RuntimeError("steps check failed")
+
+            def assertWorkerStarted(self):
+                if not workerStarted.wait(timeout=1):
+                    raise AssertionError("Worker step did not start.")
+
+            def loadSteps(self):
+                return []
+
+            def _storeSteps(self):
+                pass
+
+            def _store(self, *objects):
+                pass
+
+            def _stepStarted(self, step):
+                pass
+
+            def _stepFinished(self, step):
+                self.lastStatus = step.getStatus()
+                return True
+
+        protocol = FailingStepsCheckProtocol(
+            runMode=pwprot.MODE_RESTART,
+        )
+
+        protocol.setStepsExecutor(
+            pwprot.ThreadStepExecutor(
+                None,
+                1,
+                gpuList=None,
+            )
+        )
+
+        pwprot.Step.run(protocol)
+
+        self.assertTrue(workerFinished.is_set())
+        self.assertTrue(protocol.isFailed())
+        self.assertIn(
+            "steps check failed",
+            protocol.getErrorMessage(),
+        )
 
 def test_resumeRerunsStepWhenPrerequisiteWasInvalidated():
     def makeStep(name, argument, index, prerequisite=None, finished=False):
