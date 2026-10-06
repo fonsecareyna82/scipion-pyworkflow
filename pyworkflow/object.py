@@ -1216,6 +1216,7 @@ class Set(Object):
 
         """
         closedMapper = self._mapper is None
+        item = None
 
         if isinstance(itemId, dict):
             for obj in self._getMapper().selectBy(**itemId):

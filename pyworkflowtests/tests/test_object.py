@@ -366,6 +366,13 @@ def test_Sets(testOutputPath):
     item = imgSet.getItem("id", 2)
     assert item.getObjId() == 2, "Item accessed field id does not work"
 
+    # Request missing item by field
+    missingItem = imgSet.getItem("id", 999999)
+    assert missingItem is None, (
+        "Set.getItem must return None when no item matches the requested field."
+    )
+
+
     # Test load properties queries
     from pyworkflow.mapper.sqlite_db import logger
     logger.setLevel(DEBUG)
