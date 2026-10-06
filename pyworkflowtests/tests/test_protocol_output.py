@@ -106,6 +106,26 @@ def test_basicObjectOutput(testOutputPath):
     assert prot._useOutputList.get(), "useOutputList not activated"
 
 
+def test_iterOutputAttributesRemovesConsecutiveMissingOutputs():
+    prot = ProtOutputTest(n=2)
+
+    prot._useOutputList.set(True)
+    prot._outputs.set([
+        "missingOutputOne",
+        "missingOutputTwo",
+        "validOutput",
+    ])
+    prot.validOutput = pwobj.Integer(1)
+
+    outputs = list(prot.iterOutputAttributes())
+
+    assert outputs == [("validOutput", prot.validOutput)]
+    assert list(prot._outputs) == ["validOutput"], (
+        "iterOutputAttributes must remove every stale output name, including "
+        "consecutive missing outputs."
+    )
+
+
 def test_basicObjectInProject(testProject):
     prot = testProject.newProtocol(ProtOutputTest, objLabel='to generate basic input')
     print("working dir: %s" % prot.getWorkingDir())

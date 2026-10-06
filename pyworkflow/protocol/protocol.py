@@ -1045,8 +1045,9 @@ class Protocol(Step):
         """ This methods iterates through a list where outputs have been
         annotated"""
 
-        # Loop through the output list
-        for attrName in self._outputs:
+        # Iterate over a snapshot because stale names are removed from
+        # self._outputs while traversing it.
+        for attrName in list(self._outputs):
 
             # FIX: When deleting manually an output, specially for interactive protocols.
             # The _outputs is properly deleted in projects.sqlite, not it's run.db remains.
