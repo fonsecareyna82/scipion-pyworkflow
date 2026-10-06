@@ -1106,7 +1106,8 @@ class CsvList(Scalar, list):
         """ Comparison for scalars should be by value
         and for other objects by reference.
         """
-        return all(a == b for a, b in zip(self, other))
+        return (len(self) == len(other)
+                and all(a == b for a, b in zip(self, other)))
 
 
 class Set(Object):

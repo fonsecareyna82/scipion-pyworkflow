@@ -718,6 +718,21 @@ def test_CsvList_fromStringAndList():
     assert csv.isEmpty()
 
 
+def test_CsvListDifferentLengthsAreNotEqual():
+    shorter = pwobj.CsvList(pType=int)
+    shorter.set([1, 2, 3])
+
+    longer = pwobj.CsvList(pType=int)
+    longer.set([1, 2, 3, 4])
+
+    assert not (shorter == longer), (
+        "CsvList values with different lengths must not compare equal."
+    )
+    assert not (longer == shorter), (
+        "CsvList equality must remain false regardless of operand order."
+    )
+
+
 def test_Scalar_comparisons():
     a = pwobj.Integer(1)
     b = pwobj.Integer(2)
