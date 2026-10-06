@@ -126,6 +126,39 @@ def test_iterOutputAttributesRemovesConsecutiveMissingOutputs():
     )
 
 
+def test_defineOutputsDeletesPreviousOutputOnReplacement():
+    class RecordingMapper:
+        def __init__(self):
+            self.deleted = []
+            self.inserted = []
+
+        def delete(self, obj):
+            self.deleted.append(obj)
+
+        def insertChild(self, parent, key, child):
+            self.inserted.append((parent, key, child))
+
+    mapper = RecordingMapper()
+    prot = ProtOutputTest(mapper=mapper, n=2)
+    prot.setObjId(1)
+
+    oldOutput = pwobj.Integer(10)
+    oldOutput.setObjId(2)
+    newOutput = pwobj.Integer(20)
+
+    prot.replacedOutput = oldOutput
+    prot._outputs.set(["replacedOutput"])
+    prot._useOutputList.set(True)
+
+    prot._defineOutputs(replacedOutput=newOutput)
+
+    assert mapper.deleted == [oldOutput], (
+        "Replacing a protocol output must delete the previously persisted "
+        "output, not the incoming replacement."
+    )
+    assert prot.replacedOutput is newOutput
+
+
 def test_basicObjectInProject(testProject):
     prot = testProject.newProtocol(ProtOutputTest, objLabel='to generate basic input')
     print("working dir: %s" % prot.getWorkingDir())

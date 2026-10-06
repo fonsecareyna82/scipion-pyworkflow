@@ -675,7 +675,8 @@ class Protocol(Step):
         """
         for k, v in kwargs.items():
             if hasattr(self, k):
-                self._deleteChild(k, v)
+                oldOutput = getattr(self, k)
+                self._deleteChild(k, oldOutput)
             self._insertChild(k, v)
 
         # Store attributes in _output (this does not persist them!)
