@@ -159,6 +159,26 @@ def test_defineOutputsDeletesPreviousOutputOnReplacement():
     assert prot.replacedOutput is newOutput
 
 
+def test_findAttributeNameDistinguishesUnpersistedOutputs():
+    prot = ProtOutputTest(n=2)
+
+    firstOutput = pwobj.Integer(10)
+    secondOutput = pwobj.Integer(20)
+
+    assert firstOutput.getObjId() is None
+    assert secondOutput.getObjId() is None
+
+    prot.firstOutput = firstOutput
+    prot.secondOutput = secondOutput
+    prot._outputs.set(["firstOutput", "secondOutput"])
+    prot._useOutputList.set(True)
+
+    assert prot.findAttributeName(secondOutput) == "secondOutput", (
+        "Protocol.findAttributeName must distinguish different unpersisted "
+        "outputs even when both have objId=None."
+    )
+
+
 def test_basicObjectInProject(testProject):
     prot = testProject.newProtocol(ProtOutputTest, objLabel='to generate basic input')
     print("working dir: %s" % prot.getWorkingDir())

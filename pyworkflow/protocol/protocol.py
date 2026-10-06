@@ -1719,8 +1719,11 @@ class Protocol(Step):
         self.mapper.store(self._outputs)
 
     def findAttributeName(self, attr2Find):
+        objId = attr2Find.getObjId()
         for attrName, attr in self.iterOutputAttributes():
-            if attr.getObjId() == attr2Find.getObjId():
+            if attr is attr2Find:
+                return attrName
+            if objId is not None and attr.getObjId() == objId:
                 return attrName
         return None
 
