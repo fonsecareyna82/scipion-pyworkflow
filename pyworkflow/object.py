@@ -1366,9 +1366,9 @@ class Set(Object):
         """ Return a subset of n element, making a clone of each. """
         subset = []
         for i, item in enumerate(self):
-            subset.append(item.clone())
             if i == n:
                 break
+            subset.append(item.clone())
         return subset
     
     def setRepresentative(self, representative):

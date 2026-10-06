@@ -404,6 +404,22 @@ def test_SetClearReopensClosedMapper(testOutputPath):
     assert imgSet.getFirstItem() is None
 
 
+def test_SetGetSubsetReturnsRequestedNumberOfItems(testOutputPath):
+    fn = os.path.join(testOutputPath, "test_get_subset.sqlite")
+    imgSet = MockSetOfImages(filename=fn)
+
+    for i in range(5):
+        img = MockImage()
+        img.setLocation(i + 1, IMAGES_STK)
+        imgSet.append(img)
+
+    subset = imgSet.getSubset(3)
+
+    assert len(subset) == 3, (
+        "Set.getSubset(n) must return exactly n items."
+    )
+
+
 def test_copyAttributes():
     """ Check that after copyAttributes, the values
     were properly copied.
