@@ -1322,7 +1322,7 @@ class Set(Object):
             self._mapper = None
         
     def clear(self):
-        self._mapper.clear()
+        self._getMapper().clear()
         self._idCount = 0
         self._size.set(0)
          

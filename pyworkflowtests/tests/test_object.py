@@ -384,6 +384,26 @@ def test_Sets(testOutputPath):
     compareSetProperties(imgSet, imgSetVerbose, ignore=[])
 
 
+def test_SetClearReopensClosedMapper(testOutputPath):
+    fn = os.path.join(testOutputPath, "test_clear_closed_set.sqlite")
+    imgSet = MockSetOfImages(filename=fn)
+
+    img = MockImage()
+    img.setLocation(1, IMAGES_STK)
+    imgSet.append(img)
+    imgSet.write()
+
+    assert imgSet.getSize() == 1
+
+    imgSet.close()
+    assert imgSet._mapper is None
+
+    imgSet.clear()
+
+    assert imgSet.getSize() == 0
+    assert imgSet.getFirstItem() is None
+
+
 def test_copyAttributes():
     """ Check that after copyAttributes, the values
     were properly copied.
